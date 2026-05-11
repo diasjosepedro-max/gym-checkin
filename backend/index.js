@@ -4,13 +4,9 @@ require('dotenv').config();
 
 const app = express();
 
-// CORS — permite pedidos do Vercel e localhost
+// CORS — permite todos os pedidos
 app.use(cors({
-  origin: [
-    'https://gym-checkin-rose.vercel.app',
-    'http://localhost:5173',
-    'http://localhost:3000'
-  ],
+  origin: true,
   credentials: true
 }));
 
