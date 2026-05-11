@@ -1,16 +1,32 @@
 import { useState, useEffect } from 'react';
-import Schedule   from './components/Schedule';
-import Payments   from './components/Payments';
-import Admin      from './components/Admin';
+import Schedule from './components/Schedule';
+import Payments from './components/Payments';
+import Admin    from './components/Admin';
+import Login    from './components/Login';
 import { getMembers, getTeachers, getClasses } from './api';
+import api      from './api';
 import './App.css';
 
 export default function App() {
-  const [view, setView]       = useState('schedule');
-  const [members, setMembers] = useState([]);
+  const [view, setView]         = useState('schedule');
+  const [members, setMembers]   = useState([]);
   const [teachers, setTeachers] = useState([]);
-  const [classes, setClasses] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [classes, setClasses]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [user, setUser]         = useState(null);
+
+  // Verifica token guardado
+  useEffect(() => {
+    const token = localStorage.getItem('gym_token');
+    if (token) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      api.get('/auth/me')
+        .then(({ data }) => { setUser(data); loadData(); })
+        .catch(() => { localStorage.removeItem('gym_token'); setLoading(false); });
+    } else {
+      setLoading(false);
+    }
+  }, []);
 
   async function loadData() {
     try {
@@ -25,7 +41,23 @@ export default function App() {
     }
   }
 
-  useEffect(() => { loadData(); }, []);
+  function handleLogin(userData) {
+    const token = localStorage.getItem('gym_token');
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    setUser(userData);
+    loadData();
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('gym_token');
+    delete api.defaults.headers.common['Authorization'];
+    setUser(null);
+    setMembers([]); setTeachers([]); setClasses([]);
+  }
+
+  if (loading) return <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace', fontSize:12, color:'var(--muted)' }}>A carregar...</div>;
+
+  if (!user) return <Login onLogin={handleLogin}/>;
 
   const shared = { members, teachers, classes, reload: loadData };
 
@@ -35,23 +67,18 @@ export default function App() {
         <div className="header-inner">
           <div className="logo"><span>●</span> GYM<span className="logo-sub">CHECK-IN</span></div>
           <nav className="nav">
-            <button className={view === 'schedule' ? 'active' : ''} onClick={() => setView('schedule')}>Horário</button>
-            <button className={view === 'payments' ? 'active' : ''} onClick={() => setView('payments')}>Pagamentos</button>
-            <button className={view === 'admin'    ? 'active' : ''} onClick={() => setView('admin')}>Admin</button>
+            <button className={view==='schedule'?'active':''} onClick={() => setView('schedule')}>Horário</button>
+            <button className={view==='payments'?'active':''} onClick={() => setView('payments')}>Pagamentos</button>
+            <button className={view==='admin'   ?'active':''} onClick={() => setView('admin')}>Admin</button>
+            <button onClick={handleLogout} style={{ color:'var(--red)', fontSize:11 }}>Sair</button>
           </nav>
         </div>
       </header>
 
       <main className="main">
-        {loading ? (
-          <div className="loading">A carregar...</div>
-        ) : (
-          <>
-            {view === 'schedule' && <Schedule {...shared} />}
-            {view === 'payments' && <Payments {...shared} />}
-            {view === 'admin'    && <Admin    {...shared} />}
-          </>
-        )}
+        {view === 'schedule' && <Schedule {...shared}/>}
+        {view === 'payments' && <Payments {...shared}/>}
+        {view === 'admin'    && <Admin    {...shared}/>}
       </main>
     </div>
   );
