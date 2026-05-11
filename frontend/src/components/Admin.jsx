@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createMember, deleteMember, createTeacher, deleteTeacher, createClass, deleteClass, getCheckins, deleteCheckin } from '../api';
+import api from '../api';
 
 const DAYS    = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
 const PALETTE = ['#85a800','#e74c3c','#1abc9c','#f39c12','#8e44ad','#e67e22','#16a085','#e91e63','#2980b9','#d35400','#27ae60','#f1c40f'];
@@ -10,6 +11,12 @@ export default function Admin({ members, teachers, classes, reload }) {
   const [ntName, setNtName]     = useState('');
   const [checkins, setCheckins] = useState([]);
   const [ncForm, setNcForm]     = useState({ name:'', day:0, time:'08:00', duration:60, teacher_id:'', color:PALETTE[0], allowed_members:[] });
+
+  // Novo utilizador
+  const [nuEmail, setNuEmail]   = useState('');
+  const [nuPass, setNuPass]     = useState('');
+  const [nuName, setNuName]     = useState('');
+  const [nuMsg, setNuMsg]       = useState('');
 
   const today = new Date().toISOString().slice(0,10);
 
@@ -55,14 +62,26 @@ export default function Admin({ members, teachers, classes, reload }) {
     await reload();
   }
 
+  async function createUser() {
+    if (!nuEmail.trim() || !nuPass.trim()) return;
+    try {
+      await api.post('/auth/register', { email: nuEmail, password: nuPass, name: nuName });
+      setNuMsg('✓ Utilizador criado com sucesso!');
+      setNuEmail(''); setNuPass(''); setNuName('');
+    } catch (e) {
+      setNuMsg('✗ ' + (e.response?.data?.error || 'Erro ao criar utilizador'));
+    }
+    setTimeout(() => setNuMsg(''), 3000);
+  }
+
   return (
     <div id="admin-view">
       <div className="sec-title"><span>ADMINISTRAÇÃO</span></div>
 
       <div className="tab-btns">
-        {['classes','members','teachers','checkins'].map(t => (
+        {['classes','members','teachers','checkins','users'].map(t => (
           <button key={t} className={`tab-btn ${tab===t?'active':''}`} onClick={() => handleTab(t)}>
-            {t === 'classes' ? 'Aulas' : t === 'members' ? 'Membros' : t === 'teachers' ? 'Professores' : 'Check-ins'}
+            {t === 'classes' ? 'Aulas' : t === 'members' ? 'Membros' : t === 'teachers' ? 'Professores' : t === 'checkins' ? 'Check-ins' : 'Utilizadores'}
           </button>
         ))}
       </div>
@@ -206,6 +225,32 @@ export default function Admin({ members, teachers, classes, reload }) {
                 );
               })
           }
+        </div>
+      )}
+      {/* UTILIZADORES */}
+      {tab === 'users' && (
+        <div>
+          <div className="card">
+            <div className="card-title">CRIAR UTILIZADOR</div>
+            <div style={{ marginBottom:12 }}>
+              <div className="input-label">NOME</div>
+              <input className="input" placeholder="Nome" value={nuName} onChange={e => setNuName(e.target.value)}/>
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <div className="input-label">EMAIL</div>
+              <input className="input" type="email" placeholder="email@exemplo.com" value={nuEmail} onChange={e => setNuEmail(e.target.value)}/>
+            </div>
+            <div style={{ marginBottom:16 }}>
+              <div className="input-label">PASSWORD</div>
+              <input className="input" type="password" placeholder="••••••••" value={nuPass} onChange={e => setNuPass(e.target.value)}/>
+            </div>
+            {nuMsg && (
+              <div style={{ padding:'10px 14px', borderRadius:8, fontFamily:'monospace', fontSize:11, marginBottom:14, background: nuMsg.startsWith('✓') ? 'var(--green-bg)' : 'var(--red-bg)', color: nuMsg.startsWith('✓') ? 'var(--green)' : 'var(--red)', border: `1px solid ${nuMsg.startsWith('✓') ? 'var(--green-b)' : 'var(--red-b)'}` }}>
+                {nuMsg}
+              </div>
+            )}
+            <button className="green-btn" onClick={createUser}>CRIAR UTILIZADOR</button>
+          </div>
         </div>
       )}
     </div>
