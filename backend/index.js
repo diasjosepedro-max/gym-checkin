@@ -12,6 +12,7 @@ app.use('/api/teachers', require('./routes/teachers'));
 app.use('/api/classes',  require('./routes/classes'));
 app.use('/api/checkins', require('./routes/checkins'));
 app.use('/api/payments', require('./routes/payments'));
+app.use('/api/auth', require('./routes/auth'));
 
 // Health check
 app.get('/', (req, res) => res.json({ status: 'GYM API online' }));
