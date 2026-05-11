@@ -4,12 +4,16 @@ require('dotenv').config();
 
 const app = express();
 
-// CORS — permite todos os pedidos
-app.use(cors({
-  origin: true,
-  credentials: true
-}));
+// CORS manual — garante headers em todos os pedidos
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 
+app.use(cors());
 app.use(express.json());
 
 // Rotas
