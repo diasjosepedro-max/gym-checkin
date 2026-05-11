@@ -3,16 +3,26 @@ const cors    = require('cors');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+
+// CORS — permite pedidos do Vercel e localhost
+app.use(cors({
+  origin: [
+    'https://gym-checkin-rose.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  credentials: true
+}));
+
 app.use(express.json());
 
 // Rotas
+app.use('/api/auth',     require('./routes/auth'));
 app.use('/api/members',  require('./routes/members'));
 app.use('/api/teachers', require('./routes/teachers'));
 app.use('/api/classes',  require('./routes/classes'));
 app.use('/api/checkins', require('./routes/checkins'));
 app.use('/api/payments', require('./routes/payments'));
-app.use('/api/auth', require('./routes/auth'));
 
 // Health check
 app.get('/', (req, res) => res.json({ status: 'GYM API online' }));
