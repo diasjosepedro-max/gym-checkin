@@ -10,9 +10,8 @@ export default function Admin({ members, teachers, classes, reload }) {
   const [nmName, setNmName]     = useState('');
   const [ntName, setNtName]     = useState('');
   const [checkins, setCheckins] = useState([]);
+  const [users, setUsers]       = useState([]);
   const [ncForm, setNcForm]     = useState({ name:'', day:0, time:'08:00', duration:60, teacher_id:'', color:PALETTE[0], allowed_members:[] });
-
-  // Novo utilizador
   const [nuEmail, setNuEmail]   = useState('');
   const [nuPass, setNuPass]     = useState('');
   const [nuName, setNuName]     = useState('');
@@ -25,9 +24,17 @@ export default function Admin({ members, teachers, classes, reload }) {
     setCheckins(data);
   }
 
+  async function loadUsers() {
+    try {
+      const { data } = await api.get('/auth/users');
+      setUsers(data);
+    } catch(e) { console.error(e); }
+  }
+
   function handleTab(t) {
     setTab(t);
     if (t === 'checkins') loadCheckins();
+    if (t === 'users') loadUsers();
   }
 
   async function addMember() {
@@ -68,6 +75,7 @@ export default function Admin({ members, teachers, classes, reload }) {
       await api.post('/auth/register', { email: nuEmail, password: nuPass, name: nuName });
       setNuMsg('✓ Utilizador criado com sucesso!');
       setNuEmail(''); setNuPass(''); setNuName('');
+      loadUsers();
     } catch (e) {
       setNuMsg('✗ ' + (e.response?.data?.error || 'Erro ao criar utilizador'));
     }
@@ -81,7 +89,7 @@ export default function Admin({ members, teachers, classes, reload }) {
       <div className="tab-btns">
         {['classes','members','teachers','checkins','users'].map(t => (
           <button key={t} className={`tab-btn ${tab===t?'active':''}`} onClick={() => handleTab(t)}>
-            {t === 'classes' ? 'Aulas' : t === 'members' ? 'Membros' : t === 'teachers' ? 'Professores' : t === 'checkins' ? 'Check-ins' : 'Utilizadores'}
+            {t==='classes'?'Aulas':t==='members'?'Membros':t==='teachers'?'Professores':t==='checkins'?'Check-ins':'Utilizadores'}
           </button>
         ))}
       </div>
@@ -227,6 +235,7 @@ export default function Admin({ members, teachers, classes, reload }) {
           }
         </div>
       )}
+
       {/* UTILIZADORES */}
       {tab === 'users' && (
         <div>
@@ -251,6 +260,20 @@ export default function Admin({ members, teachers, classes, reload }) {
             )}
             <button className="green-btn" onClick={createUser}>CRIAR UTILIZADOR</button>
           </div>
+
+          <div className="admin-day-title">UTILIZADORES COM ACESSO</div>
+          {users.length === 0
+            ? <div className="card" style={{ textAlign:'center', padding:20, fontFamily:'monospace', fontSize:12, color:'var(--muted)' }}>Sem utilizadores.</div>
+            : users.map(u => (
+              <div key={u.id} className="card" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', marginBottom:8 }}>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:17 }}>{u.name}</div>
+                  <div style={{ fontFamily:'monospace', fontSize:10, color:'var(--muted)', marginTop:2 }}>{u.email}</div>
+                </div>
+                <button className="del-btn" onClick={async () => { await api.delete(`/auth/users/${u.id}`); loadUsers(); }}>REMOVER</button>
+              </div>
+            ))
+          }
         </div>
       )}
     </div>
