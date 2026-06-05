@@ -42,7 +42,7 @@ router.put('/clients/:id', auth, async (req, res) => {
 
 router.delete('/clients/:id', auth, async (req, res) => {
   try {
-    await db.query('DELETE FROM financial_clients WHERE id=$1', [req.params.id]);
+    await db.query('UPDATE financial_clients SET active=false WHERE id=$1', [req.params.id]);
     res.json({ success: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

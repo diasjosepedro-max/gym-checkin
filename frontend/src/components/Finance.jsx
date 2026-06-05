@@ -125,6 +125,14 @@ export default function Finance() {
   }
 
   // Novo cliente financeiro
+  async function deactivateClient(c) {
+    if (!confirm(`Remover "${c.name}"?\nOs dados dos meses anteriores são mantidos.`)) return;
+    try {
+      await api.delete(`/finance/clients/${c.id}`);
+      await loadAll();
+    } catch(e) { alert('Erro: ' + (e.response?.data?.error || e.message)); }
+  }
+
   async function addClient() {
     if (!newClient.name.trim()) return;
     try {
@@ -447,9 +455,12 @@ export default function Finance() {
                         <td style={{padding:'10px 12px',textAlign:'right',fontSize:12,color:'var(--muted)'}}>{fmt(getProfValue(c.id))}</td>
                         <td style={{padding:'10px 12px',fontSize:11,color:'var(--muted)',fontStyle:'italic'}}>{getDate(c.id)}</td>
                         <td style={{padding:'10px 12px',textAlign:'right'}}>
-                          <button onClick={()=>toggle(c)} style={{fontSize:11,fontWeight:500,padding:'5px 11px',borderRadius:6,cursor:'pointer',background:p?'var(--red-bg)':'var(--green-bg)',border:p?'1px solid var(--red-b)':'1px solid var(--green-b)',color:p?'var(--red)':'var(--green)'}}>
-                            {p?'✕ Desfazer':'✓ Pago'}
-                          </button>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:6}}>
+                            <button onClick={()=>toggle(c)} style={{fontSize:11,fontWeight:500,padding:'5px 11px',borderRadius:6,cursor:'pointer',background:p?'var(--red-bg)':'var(--green-bg)',border:p?'1px solid var(--red-b)':'1px solid var(--green-b)',color:p?'var(--red)':'var(--green)'}}>
+                              {p?'✕ Desfazer':'✓ Pago'}
+                            </button>
+                            <button onClick={()=>deactivateClient(c)} title="Remover cliente" style={{fontSize:11,padding:'5px 8px',borderRadius:6,cursor:'pointer',background:'none',border:'1px solid var(--border)',color:'var(--muted)'}}>✕</button>
+                          </div>
                         </td>
                       </tr>
                       {/* Linha de edição inline */}
