@@ -125,7 +125,7 @@ export default function Finance() {
   async function addClient() {
     if (!newClient.name.trim()) return;
     try {
-      await api.post('/finance/clients', {
+      const { data: client } = await api.post('/finance/clients', {
         name: newClient.name.trim(),
         type: newClient.type,
         sessions: newClient.sessions,
@@ -134,6 +134,15 @@ export default function Finance() {
         professor_id: newClient.professor_id || null,
         has_pack: newClient.has_pack,
         has_insurance: newClient.has_insurance,
+      });
+      await api.post('/finance/values', {
+        client_id: client.id,
+        month, year,
+        value: Number(newClient.standard_value) || 0,
+        professor_value: Number(newClient.value_to_professor) || 0,
+        monthly_professor_id: newClient.professor_id || null,
+        monthly_has_pack: newClient.has_pack,
+        is_new_standard: false,
       });
       setNewClient({ name:'', type:'PT', sessions:'1x', standard_value:'', value_to_professor:'', professor_id:'', has_pack:false, has_insurance:false });
       setShowNewClient(false);
@@ -188,7 +197,7 @@ export default function Finance() {
   // Custo dos professores = sessões × valor/sessão
   const tcTotal    = teachers.reduce((s,t)=>s+getSessions(t.id).length*Number(t.value_per_session||0),0);
   // + valor prof por cliente (se definido)
-  const clientProfTotal = withVal.filter(c=>isPaid(c.id)).reduce((s,c)=>s+getProfValue(c.id),0);
+  const clientProfTotal = withVal.reduce((s,c)=>s+getProfValue(c.id),0);
   const totalCosts = fcTotal + tcTotal;
   const profit     = received - totalCosts - clientProfTotal;
   const projected  = total - totalCosts - withVal.reduce((s,c)=>s+getProfValue(c.id),0);
