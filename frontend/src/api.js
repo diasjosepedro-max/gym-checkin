@@ -8,7 +8,7 @@ export default api;
 
 // Membros
 export const getMembers    = ()           => api.get('/members');
-export const createMember  = (name)       => api.post('/members', { name });
+export const createMember  = (data)       => api.post('/members', data);
 export const deleteMember  = (id)         => api.delete(`/members/${id}`);
 
 // Professores

@@ -3,6 +3,7 @@ import Schedule from './components/Schedule';
 import Payments from './components/Payments';
 import Admin    from './components/Admin';
 import Login    from './components/Login';
+import Finance  from './components/Finance';
 import { getMembers, getTeachers, getClasses } from './api';
 import api      from './api';
 import './App.css';
@@ -15,7 +16,6 @@ export default function App() {
   const [loading, setLoading]   = useState(true);
   const [user, setUser]         = useState(null);
 
-  // Verifica token guardado
   useEffect(() => {
     const token = localStorage.getItem('gym_token');
     if (token) {
@@ -55,21 +55,32 @@ export default function App() {
     setMembers([]); setTeachers([]); setClasses([]);
   }
 
-  if (loading) return <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace', fontSize:12, color:'var(--muted)' }}>A carregar...</div>;
+  if (loading) return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace', fontSize:12, color:'var(--muted)' }}>
+      A carregar...
+    </div>
+  );
 
   if (!user) return <Login onLogin={handleLogin}/>;
 
   const shared = { members, teachers, classes, reload: loadData };
 
+  const navItems = [
+    { key:'schedule',  label:'Horário'     },
+    { key:'payments',  label:'Pagamentos'  },
+    { key:'finance',   label:'Financeiro'  },
+    { key:'admin',     label:'Admin'       },
+  ];
+
   return (
     <div className="app">
       <header className="header">
-        <div className="header-inner">
+        <div class="header-inner">
           <div className="logo"><span>●</span> GYM<span className="logo-sub">CHECK-IN</span></div>
           <nav className="nav">
-            <button className={view==='schedule'?'active':''} onClick={() => setView('schedule')}>Horário</button>
-            <button className={view==='payments'?'active':''} onClick={() => setView('payments')}>Pagamentos</button>
-            <button className={view==='admin'   ?'active':''} onClick={() => setView('admin')}>Admin</button>
+            {navItems.map(({ key, label }) => (
+              <button key={key} className={view===key ? 'active' : ''} onClick={() => setView(key)}>{label}</button>
+            ))}
             <button onClick={handleLogout} style={{ color:'var(--red)', fontSize:11 }}>Sair</button>
           </nav>
         </div>
@@ -78,7 +89,8 @@ export default function App() {
       <main className="main">
         {view === 'schedule' && <Schedule {...shared}/>}
         {view === 'payments' && <Payments {...shared}/>}
-        {view === 'admin'    && <Admin    {...shared}/>}
+        {view === 'finance'  && <Finance/>}
+        {view === 'admin'    && <Admin   {...shared}/>}
       </main>
     </div>
   );
