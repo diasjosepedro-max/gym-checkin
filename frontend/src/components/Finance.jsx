@@ -72,6 +72,9 @@ export default function Finance() {
   const isPaid       = cid => payments.find(p=>p.client_id===cid)?.paid===true;
   const getDate      = cid => payments.find(p=>p.client_id===cid)?.payment_date||'';
   const getSessions  = tid => tSessions.filter(s=>s.teacher_id===tid);
+  const getClientProfTotal = tid => withVal
+    .filter(c => (getVal(c.id)?.monthly_professor_id || c.professor_id) === tid)
+    .reduce((s,c) => s + getProfValue(c.id), 0);
 
   // Toggle pagamento
   async function toggle(client) {
@@ -288,11 +291,22 @@ export default function Finance() {
             <div style={{...s.crow,fontWeight:500}}><span style={{color:'var(--muted)'}}>Total</span><span style={{color:'var(--red)'}}>{fmt(fcTotal+clientProfTotal)}</span></div>
           </div>
           <div style={s.panel}>
-            <div style={s.pHdr}>Professores (sessões)</div>
-            {teachers.map(t=>{const sess=getSessions(t.id);const vps=Number(t.value_per_session||0);return(
-              <div key={t.id} style={s.crow}><span style={{color:'var(--muted)'}}>{t.name}</span><span>{sess.length}× {fmt(vps)} = <b>{fmt(sess.length*vps)}</b></span></div>
-            );})}
-            <div style={{...s.crow,fontWeight:500}}><span style={{color:'var(--muted)'}}>Total</span><span style={{color:'var(--red)'}}>{fmt(tcTotal)}</span></div>
+            <div style={s.pHdr}>Professores</div>
+            {teachers.map(t=>{
+              const sess=getSessions(t.id); const vps=Number(t.value_per_session||0);
+              const sessTotal=sess.length*vps; const cliTotal=getClientProfTotal(t.id);
+              return(
+                <div key={t.id} style={s.crow}>
+                  <span style={{color:'var(--muted)'}}>{t.name}</span>
+                  <div style={{textAlign:'right'}}>
+                    {cliTotal>0&&<div style={{fontSize:10,color:'var(--muted)'}}>clientes {fmt(cliTotal)}</div>}
+                    {sessTotal>0&&<div style={{fontSize:10,color:'var(--muted)'}}>sessões {fmt(sessTotal)}</div>}
+                    <b>{fmt(sessTotal+cliTotal)}</b>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{...s.crow,fontWeight:500}}><span style={{color:'var(--muted)'}}>Total</span><span style={{color:'var(--red)'}}>{fmt(tcTotal+clientProfTotal)}</span></div>
           </div>
           <div style={s.panel}>
             <div style={s.pHdr}>Resultado</div>
@@ -555,22 +569,47 @@ export default function Finance() {
 
             {teachers.map(t=>{
               const sess=getSessions(t.id); const vps=Number(t.value_per_session||0);
+              const sessTotal=sess.length*vps; const cliTotal=getClientProfTotal(t.id);
+              const tClients=withVal.filter(c=>(getVal(c.id)?.monthly_professor_id||c.professor_id)===t.id);
               return(
                 <div key={t.id} className="cls-row" style={{borderLeft:'3px solid var(--accent)',marginBottom:12}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
                     <span style={{fontWeight:900,fontSize:16,letterSpacing:1}}>{t.name.toUpperCase()}</span>
-                    <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      <span style={{fontFamily:'monospace',fontSize:11,color:'var(--muted)'}}>Valor/sessão:</span>
-                      {editSessVal[t.id]!==undefined
-                        ? <div style={{display:'flex',gap:4}}>
-                            <input type="number" defaultValue={vps} autoFocus style={{width:70,padding:'3px 6px',borderRadius:6,border:'1px solid var(--accent)',fontFamily:'monospace',fontSize:12}}
-                              onKeyDown={e=>{if(e.key==='Enter')saveSessionValue(t.id,e.target.value);if(e.key==='Escape')setEditSessVal({});}}/>
-                            <button onClick={e=>saveSessionValue(t.id,e.target.previousSibling?.value||vps)} style={{background:'var(--green-bg)',border:'1px solid var(--green-b)',color:'var(--green)',borderRadius:5,padding:'2px 7px',fontSize:11,cursor:'pointer'}}>✓</button>
-                          </div>
-                        : <span onClick={()=>setEditSessVal({[t.id]:vps})} style={{cursor:'pointer',fontWeight:600,borderBottom:'1px dashed var(--muted)',fontFamily:'monospace',fontSize:12}}>{fmt(vps)}</span>
-                      }
-                      <span style={{fontFamily:'monospace',fontSize:12,color:'var(--accent)',fontWeight:700}}>= {fmt(sess.length*vps)}</span>
+                    <div style={{display:'flex',alignItems:'center',gap:12}}>
+                      <span style={{fontFamily:'monospace',fontSize:12,color:'var(--muted)'}}>
+                        Total a receber:
+                      </span>
+                      <span style={{fontFamily:'monospace',fontSize:16,color:'var(--accent)',fontWeight:700}}>{fmt(sessTotal+cliTotal)}</span>
                     </div>
+                  </div>
+
+                  {/* Clientes deste professor */}
+                  {tClients.length>0&&(
+                    <div style={{marginBottom:10}}>
+                      <div style={{fontSize:10,color:'var(--muted)',letterSpacing:1.5,textTransform:'uppercase',marginBottom:6}}>Clientes</div>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                        {tClients.map(c=>(
+                          <div key={c.id} style={{display:'inline-flex',alignItems:'center',gap:6,background:'var(--card2)',border:'1px solid var(--border)',borderRadius:8,padding:'5px 10px',fontSize:11}}>
+                            <span>{c.name}</span>
+                            <span style={{fontFamily:'monospace',fontWeight:600,color:'var(--accent)'}}>{fmt(getProfValue(c.id))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sessões */}
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                    <span style={{fontFamily:'monospace',fontSize:11,color:'var(--muted)'}}>Sessões — valor/sessão:</span>
+                    {editSessVal[t.id]!==undefined
+                      ? <div style={{display:'flex',gap:4}}>
+                          <input type="number" defaultValue={vps} autoFocus style={{width:70,padding:'3px 6px',borderRadius:6,border:'1px solid var(--accent)',fontFamily:'monospace',fontSize:12}}
+                            onKeyDown={e=>{if(e.key==='Enter')saveSessionValue(t.id,e.target.value);if(e.key==='Escape')setEditSessVal({});}}/>
+                          <button onClick={e=>saveSessionValue(t.id,e.target.previousSibling?.value||vps)} style={{background:'var(--green-bg)',border:'1px solid var(--green-b)',color:'var(--green)',borderRadius:5,padding:'2px 7px',fontSize:11,cursor:'pointer'}}>✓</button>
+                        </div>
+                      : <span onClick={()=>setEditSessVal({[t.id]:vps})} style={{cursor:'pointer',fontWeight:600,borderBottom:'1px dashed var(--muted)',fontFamily:'monospace',fontSize:12}}>{fmt(vps)}</span>
+                    }
+                    <span style={{fontFamily:'monospace',fontSize:12,color:'var(--muted)'}}>{sess.length} sessões = <b style={{color:'var(--accent)'}}>{fmt(sessTotal)}</b></span>
                   </div>
                   {sess.length===0
                     ? <div style={{fontFamily:'monospace',fontSize:11,color:'var(--muted)'}}>Sem sessões registadas.</div>
