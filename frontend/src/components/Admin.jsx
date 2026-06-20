@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createMember, deleteMember, createTeacher, deleteTeacher, createClass, deleteClass, getCheckins, deleteCheckin } from '../api';
 import api from '../api';
 
@@ -10,9 +10,14 @@ export default function Admin({ members, teachers, classes, reload }) {
   const [checkins, setCheckins] = useState([]);
   const [users, setUsers]       = useState([]);
 
+  // Clientes financeiros (fonte de verdade para membros de aulas)
+  const [financialClients, setFinancialClients] = useState([]);
+
   // Nova aula
-  const [ncForm, setNcForm] = useState({ name:'', day:0, time:'08:00', duration:60, teacher_id:'', color:PALETTE[0], allowed_members:[] });
-  const [ncFilter, setNcFilter] = useState('all');
+  const [ncForm, setNcForm]               = useState({ name:'', day:0, time:'08:00', duration:60, teacher_id:'', color:PALETTE[0] });
+  const [ncFilter, setNcFilter]           = useState('all');
+  const [ncMembersSelected, setNcMembersSelected] = useState([]);
+  const [ncAddMember, setNcAddMember]     = useState('');
 
   // Gerir membros de aula existente
   const [classEdit, setClassEdit]             = useState(null);
@@ -36,6 +41,15 @@ export default function Admin({ members, teachers, classes, reload }) {
   const [nuMsg, setNuMsg]     = useState('');
 
   const today = new Date().toISOString().slice(0,10);
+
+  useEffect(() => { loadFinancialClients(); }, []);
+
+  async function loadFinancialClients() {
+    try {
+      const { data } = await api.get('/finance/clients');
+      setFinancialClients(data.filter(c => c.active));
+    } catch(e) {}
+  }
 
   async function loadCheckins() {
     const { data } = await getCheckins(today);
@@ -75,39 +89,39 @@ export default function Admin({ members, teachers, classes, reload }) {
   }
 
   // ── Aulas ────────────────────────────────────────────────────────────
+  function filterClients(f) {
+    if (f === 'pilates') return financialClients.filter(c => c.type === 'Pilates');
+    if (f === 'pack')    return financialClients.filter(c => c.has_pack);
+    return financialClients;
+  }
+
   async function addNewClass() {
     if (!ncForm.name.trim()) return;
-    await createClass({ ...ncForm, teacher_id: ncForm.teacher_id||null });
-    setNcForm({ name:'', day:0, time:'08:00', duration:60, teacher_id:'', color:PALETTE[0], allowed_members:[] });
+    const { data: cls } = await createClass({ ...ncForm, teacher_id: ncForm.teacher_id||null });
+    if (ncMembersSelected.length) {
+      await api.post(`/classes/${cls.id}/set-financial-members`, { financial_client_ids: ncMembersSelected });
+    }
+    setNcForm({ name:'', day:0, time:'08:00', duration:60, teacher_id:'', color:PALETTE[0] });
+    setNcMembersSelected([]); setNcAddMember(''); setNcFilter('all');
     await reload();
   }
-  function toggleMember(id) {
-    setNcForm(f => ({ ...f, allowed_members: f.allowed_members.includes(id) ? f.allowed_members.filter(m=>m!==id) : [...f.allowed_members, id] }));
-  }
-  function filterMembers(f) {
-    if (f === 'pilates') return members.filter(m => m.type === 'Pilates');
-    if (f === 'pack')    return members.filter(m => m.has_pack);
-    return members;
-  }
-  async function saveClassMembers(cls) {
-    await api.put(`/classes/${cls.id}`, {
-      name: cls.name, day: cls.day, time: cls.time, duration: cls.duration,
-      teacher_id: cls.teacher_id || null, color: cls.color,
-      allowed_members: classMembersEdit,
-    });
-    setClassEdit(null); setClassAddMember('');
-    await reload();
-  }
+
   function openClassEdit(cls) {
     setClassEdit(cls.id);
     setClassFilter('all');
     setClassAddMember('');
-    setClassMembersEdit((cls.allowed_members || []).map(m => m.id));
+    // Mapeia nomes dos membros atuais para IDs de financial_clients
+    const fcIds = (cls.allowed_members || []).map(m => {
+      const fc = financialClients.find(c => c.name.toLowerCase().trim() === m.name.toLowerCase().trim());
+      return fc?.id;
+    }).filter(Boolean);
+    setClassMembersEdit(fcIds);
   }
-  function addClassMember() {
-    if (!classAddMember) return;
-    setClassMembersEdit(prev => prev.includes(classAddMember) ? prev : [...prev, classAddMember]);
-    setClassAddMember('');
+
+  async function saveClassMembers(cls) {
+    await api.post(`/classes/${cls.id}/set-financial-members`, { financial_client_ids: classMembersEdit });
+    setClassEdit(null); setClassAddMember('');
+    await reload();
   }
 
   // ── Check-ins ────────────────────────────────────────────────────────
@@ -129,6 +143,44 @@ export default function Admin({ members, teachers, classes, reload }) {
 
   const inp = { background:'var(--card2)', border:'1px solid var(--border2)', borderRadius:8, color:'var(--text)', padding:'9px 12px', fontFamily:'Space Mono,monospace', fontSize:12, outline:'none', width:'100%' };
   const lbl = { color:'var(--muted)', fontSize:10, fontFamily:'Space Mono,monospace', marginBottom:4, letterSpacing:1, display:'block' };
+
+  // UI para selecionar membros (usado em Nova Aula e edição de aula existente)
+  function MemberPicker({ color, selected, setSelected, addVal, setAddVal, filter, setFilter }) {
+    return (
+      <div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8,minHeight:28}}>
+          {selected.length === 0
+            ? <span style={{fontFamily:'monospace',fontSize:11,color:'var(--muted)'}}>Nenhum membro selecionado</span>
+            : selected.map(fcId => {
+                const fc = financialClients.find(c => c.id === fcId);
+                if (!fc) return null;
+                return <span key={fcId} style={{display:'inline-flex',alignItems:'center',gap:4,background:`${color}22`,color,border:`1px solid ${color}55`,borderRadius:20,padding:'3px 10px',fontSize:11}}>
+                  ✓ {fc.name}
+                  <button onClick={()=>setSelected(prev=>prev.filter(x=>x!==fcId))} style={{background:'none',border:'none',color,cursor:'pointer',fontSize:13,lineHeight:1,padding:'0 2px'}}>✕</button>
+                </span>;
+              })
+          }
+        </div>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <select className="input" value={filter} onChange={e=>{setFilter(e.target.value);setAddVal('');}} style={{width:'auto',padding:'6px 10px',fontSize:11}}>
+            <option value="all">Todos</option>
+            <option value="pilates">Pilates</option>
+            <option value="pack">Pack</option>
+          </select>
+          <select className="input" value={addVal} onChange={e=>setAddVal(e.target.value)} style={{flex:1,padding:'6px 10px',fontSize:11}}>
+            <option value="">— selecionar cliente —</option>
+            {filterClients(filter).filter(c=>!selected.includes(c.id)).map(c=>(
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={()=>{if(addVal){setSelected(prev=>prev.includes(addVal)?prev:[...prev,addVal]);setAddVal('');}}}
+            style={{background:'var(--accent-bg)',border:'1px solid var(--accent)',color:'var(--accent)',borderRadius:6,padding:'6px 14px',fontSize:13,fontWeight:700,cursor:'pointer'}}
+          >+</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div id="admin-view">
@@ -170,17 +222,16 @@ export default function Admin({ members, teachers, classes, reload }) {
                 </div>
               </div>
             </div>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
-              <div className="input-label" style={{marginBottom:0}}>MEMBROS PERMITIDOS</div>
-              <select className="input" value={ncFilter} onChange={e=>setNcFilter(e.target.value)} style={{width:'auto',padding:'4px 10px',fontSize:11}}>
-                <option value="all">Todos</option>
-                <option value="pilates">Pilates</option>
-                <option value="pack">Pack</option>
-              </select>
-            </div>
-            <div>{filterMembers(ncFilter).map(m=>{const on=ncForm.allowed_members.includes(m.id);return(<button key={m.id} className="tag-btn" onClick={()=>toggleMember(m.id)} style={on?{background:`${ncForm.color}22`,borderColor:`${ncForm.color}88`,color:ncForm.color}:{}}>{on?'✓ ':'+ '}{m.name}</button>);})}</div>
+            <div className="input-label" style={{marginBottom:8}}>MEMBROS PERMITIDOS</div>
+            <MemberPicker
+              color={ncForm.color}
+              selected={ncMembersSelected} setSelected={setNcMembersSelected}
+              addVal={ncAddMember} setAddVal={setNcAddMember}
+              filter={ncFilter} setFilter={setNcFilter}
+            />
             <button className="green-btn" style={{marginTop:14}} onClick={addNewClass}>CRIAR AULA</button>
           </div>
+
           {DAYS.map((day,idx)=>{
             const dayCls=classes.filter(c=>c.day===idx); if(!dayCls.length) return null;
             return(<div key={idx}><div className="admin-day-title">{day.toUpperCase()}</div>
@@ -195,37 +246,17 @@ export default function Admin({ members, teachers, classes, reload }) {
                     </div>
                     <button className="del-btn" onClick={async()=>{await deleteClass(cls.id);await reload();}}>REMOVER</button>
                   </div>
+
                   {classEdit === cls.id ? (
                     <div>
                       <div className="section-sub">MEMBROS COM ACESSO</div>
-                      {/* Membros já adicionados */}
-                      <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:10,minHeight:24}}>
-                        {classMembersEdit.length === 0
-                          ? <span style={{fontFamily:'monospace',fontSize:11,color:'var(--muted)'}}>Nenhum membro</span>
-                          : classMembersEdit.map(mid => {
-                              const m = members.find(x => x.id === mid);
-                              if (!m) return null;
-                              return <span key={mid} style={{display:'inline-flex',alignItems:'center',gap:4,background:`${cls.color}22`,color:cls.color,border:`1px solid ${cls.color}55`,borderRadius:20,padding:'3px 10px',fontSize:11}}>
-                                ✓ {m.name}
-                                <button onClick={()=>setClassMembersEdit(prev=>prev.filter(x=>x!==mid))} style={{background:'none',border:'none',color:cls.color,cursor:'pointer',fontSize:13,lineHeight:1,padding:'0 2px'}}>✕</button>
-                              </span>;
-                            })
-                        }
-                      </div>
-                      {/* Adicionar membro */}
-                      <div style={{display:'flex',gap:6,marginBottom:10,alignItems:'center'}}>
-                        <select className="input" value={classFilter} onChange={e=>{setClassFilter(e.target.value);setClassAddMember('');}} style={{width:'auto',padding:'6px 10px',fontSize:11}}>
-                          <option value="all">Todos</option>
-                          <option value="pilates">Pilates</option>
-                          <option value="pack">Pack</option>
-                        </select>
-                        <select className="input" value={classAddMember} onChange={e=>setClassAddMember(e.target.value)} style={{flex:1,padding:'6px 10px',fontSize:11}}>
-                          <option value="">— selecionar membro —</option>
-                          {filterMembers(classFilter).filter(m=>!classMembersEdit.includes(m.id)).map(m=>(
-                            <option key={m.id} value={m.id}>{m.name}</option>
-                          ))}
-                        </select>
-                        <button onClick={addClassMember} style={{background:'var(--accent-bg)',border:'1px solid var(--accent)',color:'var(--accent)',borderRadius:6,padding:'6px 14px',fontSize:13,fontWeight:700,cursor:'pointer'}}>+</button>
+                      <div style={{marginBottom:10}}>
+                        <MemberPicker
+                          color={cls.color||'#85a800'}
+                          selected={classMembersEdit} setSelected={setClassMembersEdit}
+                          addVal={classAddMember} setAddVal={setClassAddMember}
+                          filter={classFilter} setFilter={setClassFilter}
+                        />
                       </div>
                       <div style={{display:'flex',gap:6}}>
                         <button onClick={()=>saveClassMembers(cls)} style={{background:'var(--green-bg)',border:'1px solid var(--green-b)',color:'var(--green)',borderRadius:6,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>✓ GUARDAR</button>
@@ -235,7 +266,12 @@ export default function Admin({ members, teachers, classes, reload }) {
                   ) : (
                     <div>
                       <div className="section-sub">MEMBROS COM ACESSO</div>
-                      <div style={{marginBottom:8}}>{(cls.allowed_members||[]).length===0?<span style={{fontFamily:'monospace',fontSize:11,color:'var(--muted)'}}>Nenhum membro</span>:(cls.allowed_members||[]).map(m=><span key={m.id} style={{fontFamily:'monospace',fontSize:11,background:`${cls.color}22`,color:cls.color,border:`1px solid ${cls.color}55`,borderRadius:20,padding:'3px 10px',margin:3,display:'inline-block'}}>✓ {m.name}</span>)}</div>
+                      <div style={{marginBottom:8}}>
+                        {(cls.allowed_members||[]).length===0
+                          ? <span style={{fontFamily:'monospace',fontSize:11,color:'var(--muted)'}}>Nenhum membro</span>
+                          : (cls.allowed_members||[]).map(m=><span key={m.id} style={{fontFamily:'monospace',fontSize:11,background:`${cls.color}22`,color:cls.color,border:`1px solid ${cls.color}55`,borderRadius:20,padding:'3px 10px',margin:3,display:'inline-block'}}>✓ {m.name}</span>)
+                        }
+                      </div>
                       <button onClick={()=>openClassEdit(cls)} style={{background:'var(--accent-bg)',border:'1px solid var(--accent)',color:'var(--accent)',borderRadius:6,padding:'4px 10px',fontSize:10,fontWeight:700,cursor:'pointer',letterSpacing:1}}>+ GERIR MEMBROS</button>
                     </div>
                   )}
@@ -251,13 +287,10 @@ export default function Admin({ members, teachers, classes, reload }) {
         <div>
           <div className="card">
             <div className="card-title">NOVO MEMBRO</div>
-
-            {/* Nome */}
             <div style={{marginBottom:12}}>
               <label style={lbl}>NOME</label>
               <input style={inp} placeholder="Nome completo" value={nmForm.name} onChange={e=>setNmForm(f=>({...f,name:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&addMember()}/>
             </div>
-
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:12}}>
               <div>
                 <label style={lbl}>TIPO</label>
@@ -282,7 +315,6 @@ export default function Admin({ members, teachers, classes, reload }) {
                 </select>
               </div>
             </div>
-
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
               <div>
                 <label style={lbl}>VALOR STANDARD (€/mês)</label>
@@ -293,17 +325,12 @@ export default function Admin({ members, teachers, classes, reload }) {
                 <input style={inp} type="number" placeholder="0" value={nmForm.value_to_professor} onChange={e=>setNmForm(f=>({...f,value_to_professor:e.target.value}))}/>
               </div>
             </div>
-
-            {/* Valor a pagar ao Habitus (calculado) */}
             {(nmForm.standard_value || nmForm.value_to_professor) ? (
               <div style={{background:'var(--accent-bg)',border:'1px solid var(--accent)',borderRadius:8,padding:'10px 14px',marginBottom:12,fontSize:12}}>
                 <span style={{color:'var(--muted)'}}>Valor a pagar ao Habitus: </span>
-                <strong style={{color:'var(--accent)'}}>
-                  {(Number(nmForm.standard_value||0) - Number(nmForm.value_to_professor||0)).toFixed(2)} €
-                </strong>
+                <strong style={{color:'var(--accent)'}}>{(Number(nmForm.standard_value||0) - Number(nmForm.value_to_professor||0)).toFixed(2)} €</strong>
               </div>
             ) : null}
-
             <div style={{display:'flex',gap:20,marginBottom:16}}>
               <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13}}>
                 <input type="checkbox" checked={nmForm.has_pack} onChange={e=>setNmForm(f=>({...f,has_pack:e.target.checked}))} style={{width:16,height:16}}/>
@@ -314,17 +341,14 @@ export default function Admin({ members, teachers, classes, reload }) {
                 Tem Seguro
               </label>
             </div>
-
             <button className="green-btn" onClick={addMember}>ADICIONAR MEMBRO</button>
           </div>
-
-          {/* Lista de membros */}
           {members.map(m=>(
             <div key={m.id} className="card" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',marginBottom:8}}>
               <div>
                 <div style={{fontWeight:700,fontSize:17}}>{m.name}</div>
                 <div style={{fontFamily:'monospace',fontSize:10,color:'var(--muted)',marginTop:2}}>
-                  {classes.filter(c=>c.allowedMembers?.includes(m.id)||c.allowed_members?.some(x=>x.id===m.id)).length} aulas com acesso
+                  {classes.filter(c=>c.allowed_members?.some(x=>x.id===m.id)).length} aulas com acesso
                 </div>
               </div>
               <button className="del-btn" onClick={async()=>{await deleteMember(m.id);await reload();}}>REMOVER</button>

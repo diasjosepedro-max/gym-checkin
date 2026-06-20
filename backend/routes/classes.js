@@ -101,6 +101,29 @@ router.put('/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST definir membros de aula a partir de clientes financeiros (find-or-create member)
+router.post('/:id/set-financial-members', async (req, res) => {
+  try {
+    const { financial_client_ids } = req.body;
+    await db.query('DELETE FROM class_members WHERE class_id=$1', [req.params.id]);
+    for (const fcId of (financial_client_ids || [])) {
+      const { rows: fc } = await db.query('SELECT name FROM financial_clients WHERE id=$1 AND active=true', [fcId]);
+      if (!fc.length) continue;
+      const name = fc[0].name;
+      let { rows: existing } = await db.query("SELECT id FROM members WHERE lower(trim(name))=lower(trim($1))", [name]);
+      let memberId;
+      if (existing.length) {
+        memberId = existing[0].id;
+      } else {
+        const { rows: nm } = await db.query('INSERT INTO members (name) VALUES ($1) RETURNING id', [name]);
+        memberId = nm[0].id;
+      }
+      await db.query('INSERT INTO class_members (class_id, member_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, memberId]);
+    }
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST override semanal de aula
 router.post('/:id/override', async (req, res) => {
   try {
