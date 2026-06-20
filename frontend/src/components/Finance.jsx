@@ -231,10 +231,10 @@ export default function Finance() {
   const tcTotal    = teachers.reduce((s,t)=>s+getSessions(t.id).length*Number(t.value_per_session||0),0);
   // + valor prof por cliente (se definido)
   const clientProfTotal = withVal.reduce((s,c)=>s+getProfValue(c.id),0);
-  const ivaTotal   = withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getHabValue(c.id)*0.23,0);
+  const ivaTotal   = withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getValue(c.id)*0.23,0);
   const totalCosts = fcTotal + tcTotal;
   const profit     = received - totalCosts - clientProfTotal - ivaTotal;
-  const projected  = total - totalCosts - withVal.reduce((s,c)=>s+getProfValue(c.id),0) - withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getHabValue(c.id)*0.23,0);
+  const projected  = total - totalCosts - withVal.reduce((s,c)=>s+getProfValue(c.id),0) - withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getValue(c.id)*0.23,0);
 
   let tableClients = active;
   if (filter==='paid')   tableClients = tableClients.filter(c=>isPaid(c.id));
