@@ -106,6 +106,16 @@ export default function Finance() {
       monthly_has_pack: f.monthly_has_pack,
       is_new_standard: f.is_new_standard||false,
     });
+    // Atualiza has_invoice no registo do cliente
+    const client = active.find(c => c.id === cid);
+    if (client) {
+      await api.put(`/finance/clients/${cid}`, {
+        name: client.name, type: client.type, sessions: client.sessions, active: client.active,
+        has_pack: client.has_pack, has_insurance: client.has_insurance, has_invoice: f.has_invoice || false,
+        professor_id: client.professor_id || null, standard_value: client.standard_value,
+        value_to_professor: client.value_to_professor,
+      });
+    }
     setEditVal(null); setEditForm({});
     await loadAll();
   }
@@ -119,6 +129,7 @@ export default function Finance() {
       monthly_professor_id: v?.monthly_professor_id || c.professor_id || '',
       monthly_has_pack: v?.monthly_has_pack ?? c.has_pack ?? false,
       is_new_standard: false,
+      has_invoice: c.has_invoice || false,
     });
   }
 
@@ -507,6 +518,10 @@ export default function Finance() {
                                   <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer'}}>
                                     <input type="checkbox" checked={editForm.monthly_has_pack} onChange={e=>setEditForm(f=>({...f,monthly_has_pack:e.target.checked}))}/>
                                     Pack este mês
+                                  </label>
+                                  <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer',color:'#E65100',fontWeight:600}}>
+                                    <input type="checkbox" checked={editForm.has_invoice||false} onChange={e=>setEditForm(f=>({...f,has_invoice:e.target.checked}))}/>
+                                    Tem Fatura (IVA)
                                   </label>
                                   <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer',color:'var(--accent)',fontWeight:600}}>
                                     <input type="checkbox" checked={editForm.is_new_standard} onChange={e=>setEditForm(f=>({...f,is_new_standard:e.target.checked}))}/>

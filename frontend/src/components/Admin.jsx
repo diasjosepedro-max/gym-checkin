@@ -18,6 +18,7 @@ export default function Admin({ members, teachers, classes, reload }) {
   const [classEdit, setClassEdit]             = useState(null);
   const [classFilter, setClassFilter]         = useState('all');
   const [classMembersEdit, setClassMembersEdit] = useState([]);
+  const [classAddMember, setClassAddMember]   = useState('');
 
   // Novo membro (com campos financeiros)
   const [nmForm, setNmForm] = useState({
@@ -94,16 +95,19 @@ export default function Admin({ members, teachers, classes, reload }) {
       teacher_id: cls.teacher_id || null, color: cls.color,
       allowed_members: classMembersEdit,
     });
-    setClassEdit(null);
+    setClassEdit(null); setClassAddMember('');
     await reload();
   }
   function openClassEdit(cls) {
     setClassEdit(cls.id);
     setClassFilter('all');
+    setClassAddMember('');
     setClassMembersEdit((cls.allowed_members || []).map(m => m.id));
   }
-  function toggleClassMember(id) {
-    setClassMembersEdit(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
+  function addClassMember() {
+    if (!classAddMember) return;
+    setClassMembersEdit(prev => prev.includes(classAddMember) ? prev : [...prev, classAddMember]);
+    setClassAddMember('');
   }
 
   // ── Check-ins ────────────────────────────────────────────────────────
@@ -193,23 +197,39 @@ export default function Admin({ members, teachers, classes, reload }) {
                   </div>
                   {classEdit === cls.id ? (
                     <div>
-                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-                        <div className="section-sub" style={{marginBottom:0}}>MEMBROS COM ACESSO</div>
-                        <select className="input" value={classFilter} onChange={e=>setClassFilter(e.target.value)} style={{width:'auto',padding:'4px 10px',fontSize:11}}>
+                      <div className="section-sub">MEMBROS COM ACESSO</div>
+                      {/* Membros já adicionados */}
+                      <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:10,minHeight:24}}>
+                        {classMembersEdit.length === 0
+                          ? <span style={{fontFamily:'monospace',fontSize:11,color:'var(--muted)'}}>Nenhum membro</span>
+                          : classMembersEdit.map(mid => {
+                              const m = members.find(x => x.id === mid);
+                              if (!m) return null;
+                              return <span key={mid} style={{display:'inline-flex',alignItems:'center',gap:4,background:`${cls.color}22`,color:cls.color,border:`1px solid ${cls.color}55`,borderRadius:20,padding:'3px 10px',fontSize:11}}>
+                                ✓ {m.name}
+                                <button onClick={()=>setClassMembersEdit(prev=>prev.filter(x=>x!==mid))} style={{background:'none',border:'none',color:cls.color,cursor:'pointer',fontSize:13,lineHeight:1,padding:'0 2px'}}>✕</button>
+                              </span>;
+                            })
+                        }
+                      </div>
+                      {/* Adicionar membro */}
+                      <div style={{display:'flex',gap:6,marginBottom:10,alignItems:'center'}}>
+                        <select className="input" value={classFilter} onChange={e=>{setClassFilter(e.target.value);setClassAddMember('');}} style={{width:'auto',padding:'6px 10px',fontSize:11}}>
                           <option value="all">Todos</option>
                           <option value="pilates">Pilates</option>
                           <option value="pack">Pack</option>
                         </select>
-                      </div>
-                      <div style={{marginBottom:10}}>
-                        {filterMembers(classFilter).map(m=>{
-                          const on=classMembersEdit.includes(m.id);
-                          return(<button key={m.id} className="tag-btn" onClick={()=>toggleClassMember(m.id)} style={on?{background:`${cls.color}22`,borderColor:`${cls.color}88`,color:cls.color}:{}}>{on?'✓ ':'+ '}{m.name}</button>);
-                        })}
+                        <select className="input" value={classAddMember} onChange={e=>setClassAddMember(e.target.value)} style={{flex:1,padding:'6px 10px',fontSize:11}}>
+                          <option value="">— selecionar membro —</option>
+                          {filterMembers(classFilter).filter(m=>!classMembersEdit.includes(m.id)).map(m=>(
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                        <button onClick={addClassMember} style={{background:'var(--accent-bg)',border:'1px solid var(--accent)',color:'var(--accent)',borderRadius:6,padding:'6px 14px',fontSize:13,fontWeight:700,cursor:'pointer'}}>+</button>
                       </div>
                       <div style={{display:'flex',gap:6}}>
                         <button onClick={()=>saveClassMembers(cls)} style={{background:'var(--green-bg)',border:'1px solid var(--green-b)',color:'var(--green)',borderRadius:6,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>✓ GUARDAR</button>
-                        <button onClick={()=>setClassEdit(null)} style={{background:'none',border:'1px solid var(--border)',color:'var(--muted)',borderRadius:6,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>CANCELAR</button>
+                        <button onClick={()=>{setClassEdit(null);setClassAddMember('');}} style={{background:'none',border:'1px solid var(--border)',color:'var(--muted)',borderRadius:6,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>CANCELAR</button>
                       </div>
                     </div>
                   ) : (
