@@ -84,6 +84,17 @@ export default function Finance() {
     await loadAll();
   }
 
+  // Toggle fatura (has_invoice)
+  async function toggleInvoice(c) {
+    await api.put(`/finance/clients/${c.id}`, {
+      name: c.name, type: c.type, sessions: c.sessions, active: c.active,
+      has_pack: c.has_pack, has_insurance: c.has_insurance, has_invoice: !c.has_invoice,
+      professor_id: c.professor_id || null, standard_value: c.standard_value,
+      value_to_professor: c.value_to_professor,
+    });
+    await loadAll();
+  }
+
   // Guardar valor mensal com split
   async function saveValue(cid) {
     const f = editForm;
@@ -209,10 +220,10 @@ export default function Finance() {
   const tcTotal    = teachers.reduce((s,t)=>s+getSessions(t.id).length*Number(t.value_per_session||0),0);
   // + valor prof por cliente (se definido)
   const clientProfTotal = withVal.reduce((s,c)=>s+getProfValue(c.id),0);
-  const ivaTotal = withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getValue(c.id)*0.23,0);
+  const ivaTotal = withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getHabValue(c.id)*0.23,0);
   const totalCosts = fcTotal + tcTotal;
   const profit     = received - totalCosts - clientProfTotal - ivaTotal;
-  const projected  = total - totalCosts - withVal.reduce((s,c)=>s+getProfValue(c.id),0) - withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getValue(c.id)*0.23,0);
+  const projected  = total - totalCosts - withVal.reduce((s,c)=>s+getProfValue(c.id),0) - withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getHabValue(c.id)*0.23,0);
 
   let tableClients = active;
   if (filter==='paid')   tableClients = tableClients.filter(c=>isPaid(c.id));
@@ -452,7 +463,7 @@ export default function Finance() {
                             <span style={{background:tag.bg,color:tag.c,fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>{c.type}</span>
                             {c.has_pack&&<span style={{background:'#EAF3DE',color:'#3B6D11',fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>PACK</span>}
                             {c.has_insurance&&<span style={{background:'#E6F1FB',color:'#185FA5',fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>SEG</span>}
-                            {c.has_invoice&&<span style={{background:'#FFF3E0',color:'#E65100',fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>FAT</span>}
+                            <button onClick={e=>{e.stopPropagation();toggleInvoice(c);}} title={c.has_invoice?'Tem fatura (clica para remover)':'Sem fatura (clica para ativar)'} style={{background:c.has_invoice?'#FFF3E0':'transparent',color:c.has_invoice?'#E65100':'var(--muted)',fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4,border:c.has_invoice?'1px solid #E65100':'1px dashed var(--border)',cursor:'pointer'}}>FAT</button>
                           </div>
                           <div style={{fontSize:10,color:'var(--muted)',fontFamily:'monospace',marginTop:2}}>{c.sessions} · Total: {fmt(getValue(c.id))}</div>
                         </td>

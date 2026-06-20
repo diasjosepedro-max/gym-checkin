@@ -1,10 +1,18 @@
 const router = require('express').Router();
 const db     = require('../db');
 
-// GET todos os membros
+// GET todos os membros (inclui type e has_pack de financial_clients para filtros)
 router.get('/', async (req, res) => {
   try {
-    const { rows } = await db.query('SELECT * FROM members ORDER BY name');
+    const { rows } = await db.query(`
+      SELECT m.*,
+        COALESCE(fc.type, 'PT') AS type,
+        COALESCE(fc.has_pack, false) AS has_pack
+      FROM members m
+      LEFT JOIN financial_clients fc
+        ON lower(trim(fc.name)) = lower(trim(m.name)) AND fc.active = true
+      ORDER BY m.name
+    `);
     res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
