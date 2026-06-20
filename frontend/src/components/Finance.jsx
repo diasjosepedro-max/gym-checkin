@@ -29,7 +29,7 @@ export default function Finance() {
 
   // Novo cliente
   const [showNewClient, setShowNewClient] = useState(false);
-  const [newClient, setNewClient] = useState({ name:'', type:'PT', sessions:'1x', standard_value:'', value_to_professor:'', professor_id:'', has_pack:false, has_insurance:false });
+  const [newClient, setNewClient] = useState({ name:'', type:'PT', sessions:'1x', standard_value:'', value_to_professor:'', professor_id:'', has_pack:false, has_insurance:false, has_invoice:false });
 
   // Despesas
   const [newCost, setNewCost] = useState({ label:'', value:'', type:'regular', expense_date:'' });
@@ -155,7 +155,7 @@ export default function Finance() {
         monthly_has_pack: newClient.has_pack,
         is_new_standard: false,
       });
-      setNewClient({ name:'', type:'PT', sessions:'1x', standard_value:'', value_to_professor:'', professor_id:'', has_pack:false, has_insurance:false });
+      setNewClient({ name:'', type:'PT', sessions:'1x', standard_value:'', value_to_professor:'', professor_id:'', has_pack:false, has_insurance:false, has_invoice:false });
       setShowNewClient(false);
       await loadAll();
     } catch(e) {
@@ -209,9 +209,10 @@ export default function Finance() {
   const tcTotal    = teachers.reduce((s,t)=>s+getSessions(t.id).length*Number(t.value_per_session||0),0);
   // + valor prof por cliente (se definido)
   const clientProfTotal = withVal.reduce((s,c)=>s+getProfValue(c.id),0);
+  const ivaTotal = withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getValue(c.id)*0.23,0);
   const totalCosts = fcTotal + tcTotal;
-  const profit     = received - totalCosts - clientProfTotal;
-  const projected  = total - totalCosts - withVal.reduce((s,c)=>s+getProfValue(c.id),0);
+  const profit     = received - totalCosts - clientProfTotal - ivaTotal;
+  const projected  = total - totalCosts - withVal.reduce((s,c)=>s+getProfValue(c.id),0) - withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getValue(c.id)*0.23,0);
 
   let tableClients = active;
   if (filter==='paid')   tableClients = tableClients.filter(c=>isPaid(c.id));
@@ -296,7 +297,8 @@ export default function Finance() {
             <div style={s.crow}><span style={{color:'var(--muted)'}}>Regulares</span><span>{fmt(regularCosts.reduce((s,c)=>s+Number(c.value),0))}</span></div>
             <div style={s.crow}><span style={{color:'var(--muted)'}}>Esporádicas</span><span>{fmt(sporadicCosts.reduce((s,c)=>s+Number(c.value),0))}</span></div>
             <div style={s.crow}><span style={{color:'var(--muted)'}}>Prof. clientes</span><span>{fmt(clientProfTotal)}</span></div>
-            <div style={{...s.crow,fontWeight:500}}><span style={{color:'var(--muted)'}}>Total</span><span style={{color:'var(--red)'}}>{fmt(fcTotal+clientProfTotal)}</span></div>
+            {ivaTotal>0&&<div style={s.crow}><span style={{color:'var(--muted)'}}>IVA (23%)</span><span>{fmt(ivaTotal)}</span></div>}
+            <div style={{...s.crow,fontWeight:500}}><span style={{color:'var(--muted)'}}>Total</span><span style={{color:'var(--red)'}}>{fmt(fcTotal+clientProfTotal+ivaTotal)}</span></div>
           </div>
           <div style={s.panel}>
             <div style={s.pHdr}>Professores</div>
@@ -319,7 +321,7 @@ export default function Finance() {
           <div style={s.panel}>
             <div style={s.pHdr}>Resultado</div>
             <div style={s.crow}><span style={{color:'var(--muted)'}}>Receita recebida</span><span>{fmt(received)}</span></div>
-            <div style={s.crow}><span style={{color:'var(--muted)'}}>Total custos</span><span style={{color:'var(--red)'}}>− {fmt(totalCosts+clientProfTotal)}</span></div>
+            <div style={s.crow}><span style={{color:'var(--muted)'}}>Total custos</span><span style={{color:'var(--red)'}}>− {fmt(totalCosts+clientProfTotal+ivaTotal)}</span></div>
             <div style={{padding:'14px 12px',background:'var(--card2)',borderBottom:'1px solid var(--border)'}}>
               <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:1.5,marginBottom:4}}>Lucro líquido atual</div>
               <div style={{fontSize:32,fontWeight:500,color:profit>=0?'var(--green)':'var(--red)'}}>{fmt(profit)}</div>
@@ -409,6 +411,10 @@ export default function Finance() {
                       <input type="checkbox" checked={newClient.has_insurance} onChange={e=>setNewClient(f=>({...f,has_insurance:e.target.checked}))}/>
                       Tem Seguro
                     </label>
+                    <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,cursor:'pointer'}}>
+                      <input type="checkbox" checked={newClient.has_invoice} onChange={e=>setNewClient(f=>({...f,has_invoice:e.target.checked}))}/>
+                      Tem Fatura (IVA 23%)
+                    </label>
                   </div>
                   <div style={{display:'flex',gap:8}}>
                     <button className="green-btn" onClick={addClient}>GUARDAR CLIENTE</button>
@@ -446,6 +452,7 @@ export default function Finance() {
                             <span style={{background:tag.bg,color:tag.c,fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>{c.type}</span>
                             {c.has_pack&&<span style={{background:'#EAF3DE',color:'#3B6D11',fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>PACK</span>}
                             {c.has_insurance&&<span style={{background:'#E6F1FB',color:'#185FA5',fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>SEG</span>}
+                            {c.has_invoice&&<span style={{background:'#FFF3E0',color:'#E65100',fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>FAT</span>}
                           </div>
                           <div style={{fontSize:10,color:'var(--muted)',fontFamily:'monospace',marginTop:2}}>{c.sessions} · Total: {fmt(getValue(c.id))}</div>
                         </td>

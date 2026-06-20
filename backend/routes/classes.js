@@ -1,6 +1,34 @@
 const router = require('express').Router();
 const db     = require('../db');
 
+db.query(`
+  CREATE TABLE IF NOT EXISTS class_week_overrides (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id UUID NOT NULL,
+    week_date DATE NOT NULL,
+    name VARCHAR(200),
+    time VARCHAR(5),
+    duration INTEGER,
+    color VARCHAR(20),
+    teacher_id UUID,
+    UNIQUE(class_id, week_date)
+  )
+`).catch(() => {});
+
+// GET overrides para uma semana
+router.get('/overrides', async (req, res) => {
+  try {
+    const { week } = req.query;
+    if (!week) return res.json([]);
+    const { rows } = await db.query(`
+      SELECT cwo.*, t.name AS teacher_name
+      FROM class_week_overrides cwo
+      LEFT JOIN teachers t ON cwo.teacher_id = t.id
+      WHERE cwo.week_date = $1`, [week]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET todas as aulas com membros
 router.get('/', async (req, res) => {
   try {
@@ -71,6 +99,22 @@ router.put('/:id', async (req, res) => {
     }
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST override semanal de aula
+router.post('/:id/override', async (req, res) => {
+  try {
+    const { week_date, name, time, duration, color, teacher_id } = req.body;
+    const { rows } = await db.query(`
+      INSERT INTO class_week_overrides (class_id, week_date, name, time, duration, color, teacher_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT (class_id, week_date) DO UPDATE SET
+        name=$3, time=$4, duration=$5, color=$6, teacher_id=$7
+      RETURNING *`,
+      [req.params.id, week_date, name, time, duration, color, teacher_id || null]
+    );
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // DELETE remover aula

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import Schedule from './components/Schedule';
-import Payments from './components/Payments';
 import Admin    from './components/Admin';
 import Login    from './components/Login';
 import Finance  from './components/Finance';
@@ -66,10 +65,9 @@ export default function App() {
   const shared = { members, teachers, classes, reload: loadData };
 
   const navItems = [
-    { key:'schedule',  label:'Horário'     },
-    { key:'payments',  label:'Pagamentos'  },
-    { key:'finance',   label:'Financeiro'  },
-    { key:'admin',     label:'Admin'       },
+    { key:'schedule', label:'Horário'    },
+    { key:'finance',  label:'Financeiro' },
+    { key:'admin',    label:'Admin'      },
   ];
 
   return (
@@ -88,7 +86,6 @@ export default function App() {
 
       <main className="main">
         {view === 'schedule' && <Schedule {...shared}/>}
-        {view === 'payments' && <Payments {...shared}/>}
         {view === 'finance'  && <Finance/>}
         {view === 'admin'    && <Admin   {...shared}/>}
       </main>
