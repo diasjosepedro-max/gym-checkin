@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import Schedule from './components/Schedule';
-import Admin    from './components/Admin';
-import Login    from './components/Login';
-import Finance  from './components/Finance';
+import Schedule   from './components/Schedule';
+import Admin      from './components/Admin';
+import Login      from './components/Login';
+import Finance    from './components/Finance';
+import Trainings  from './components/Trainings';
 import { getMembers, getTeachers, getClasses } from './api';
 import api      from './api';
 import './App.css';
@@ -65,9 +66,10 @@ export default function App() {
   const shared = { members, teachers, classes, reload: loadData };
 
   const navItems = [
-    { key:'schedule', label:'Horário'    },
-    { key:'finance',  label:'Financeiro' },
-    { key:'admin',    label:'Admin'      },
+    { key:'schedule',   label:'Horário'    },
+    { key:'finance',    label:'Financeiro' },
+    { key:'trainings',  label:'Treinos'    },
+    { key:'admin',      label:'Admin'      },
   ];
 
   return (
@@ -85,9 +87,10 @@ export default function App() {
       </header>
 
       <main className="main">
-        {view === 'schedule' && <Schedule {...shared}/>}
-        {view === 'finance'  && <Finance/>}
-        {view === 'admin'    && <Admin   {...shared}/>}
+        {view === 'schedule'  && <Schedule  {...shared}/>}
+        {view === 'finance'   && <Finance/>}
+        {view === 'trainings' && <Trainings/>}
+        {view === 'admin'     && <Admin    {...shared}/>}
       </main>
     </div>
   );
