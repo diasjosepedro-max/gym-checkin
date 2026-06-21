@@ -1,26 +1,22 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
 
-const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const TAG = { PT:{bg:'#E6F1FB',c:'#185FA5'}, Pilates:{bg:'#E1F5EE',c:'#0F6E56'}, Grupo:{bg:'#FAEEDA',c:'#854F0B'} };
 const getTag = t => TAG[t] || {bg:'var(--card2)',c:'var(--muted)'};
 
 export default function Trainings() {
-  const [month, setMonth]     = useState(MONTHS[new Date().getMonth()]);
   const [clients, setClients] = useState([]);
   const [counts, setCounts]   = useState({});
   const [loading, setLoading] = useState(true);
 
-  const year = 2026;
-
-  useEffect(() => { loadAll(); }, [month]);
+  useEffect(() => { loadAll(); }, []);
 
   async function loadAll() {
     setLoading(true);
     try {
       const [{ data: cls }, { data: trs }] = await Promise.all([
         api.get('/finance/clients'),
-        api.get(`/trainings?month=${month}&year=${year}`),
+        api.get('/trainings'),
       ]);
       setClients(cls.filter(c => c.active));
       const map = {};
@@ -33,7 +29,7 @@ export default function Trainings() {
   async function updateCount(clientId, next) {
     const val = Math.max(0, next);
     setCounts(prev => ({ ...prev, [clientId]: val }));
-    try { await api.post(`/trainings/${clientId}`, { month, year, count: val }); }
+    try { await api.post(`/trainings/${clientId}`, { count: val }); }
     catch(e) { console.error(e); }
   }
 
@@ -41,34 +37,21 @@ export default function Trainings() {
     <div style={{textAlign:'center',padding:40,fontFamily:'monospace',fontSize:12,color:'var(--muted)'}}>A carregar...</div>
   );
 
-  const total = Object.values(counts).reduce((s, n) => s + n, 0);
+  const pendentes = clients.filter(c => (counts[c.id] || 0) > 0);
 
   return (
     <div>
-      <div className="sec-title"><span>TREINOS</span></div>
-
-      {/* Selector de mês */}
-      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:20}}>
-        {MONTHS.map(m => (
-          <button key={m} onClick={() => setMonth(m)} style={{
-            background: m===month ? 'var(--accent-bg)' : 'var(--card)',
-            border:     m===month ? '1px solid var(--accent)' : '1px solid var(--border)',
-            color:      m===month ? 'var(--accent)' : 'var(--muted)',
-            fontSize:11, padding:'4px 11px', borderRadius:20, cursor:'pointer',
-            fontWeight: m===month ? 700 : 400,
-          }}>{m}</button>
-        ))}
-      </div>
+      <div className="sec-title"><span>COMPENSAÇÕES</span></div>
 
       {/* Resumo */}
       <div style={{background:'var(--card2)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px',marginBottom:16,display:'flex',gap:24,alignItems:'center'}}>
         <div>
-          <div style={{fontSize:22,fontWeight:500}}>{total}</div>
-          <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:1.5}}>Total treinos {month}</div>
+          <div style={{fontSize:22,fontWeight:500}}>{pendentes.length}</div>
+          <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:1.5}}>Clientes a compensar</div>
         </div>
         <div>
-          <div style={{fontSize:22,fontWeight:500}}>{clients.filter(c=>counts[c.id]>0).length}</div>
-          <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:1.5}}>Clientes ativos</div>
+          <div style={{fontSize:22,fontWeight:500}}>{Object.values(counts).reduce((s,n)=>s+n,0)}</div>
+          <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:1.5}}>Treinos em dívida</div>
         </div>
       </div>
 
@@ -89,7 +72,7 @@ export default function Trainings() {
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{fontWeight:600,fontSize:13}}>{c.name}</span>
                     <span style={{background:tag.bg,color:tag.c,fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>{c.type}</span>
-                    {c.sessions && <span style={{fontFamily:'monospace',fontSize:10,color:'var(--muted)'}}>{c.sessions}</span>}
+                    {count > 0 && <span style={{fontSize:10,color:'var(--accent)',fontWeight:600}}>● compensar</span>}
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <button
