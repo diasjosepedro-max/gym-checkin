@@ -1,5 +1,8 @@
 const router = require('express').Router();
 const db     = require('../db');
+const auth   = require('../middleware/auth');
+
+router.use(auth);
 
 db.query(`
   CREATE TABLE IF NOT EXISTS class_week_overrides (

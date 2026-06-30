@@ -3,7 +3,8 @@ const db       = require('../db');
 const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
 
-const SECRET = process.env.JWT_SECRET || 'gym_secret_key';
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET) throw new Error('JWT_SECRET environment variable is not set');
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {

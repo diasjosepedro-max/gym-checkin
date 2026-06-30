@@ -1,5 +1,8 @@
 const router = require('express').Router();
 const db     = require('../db');
+const auth   = require('../middleware/auth');
+
+router.use(auth);
 
 // GET todos os professores
 router.get('/', async (req, res) => {

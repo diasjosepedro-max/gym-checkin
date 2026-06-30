@@ -1,5 +1,8 @@
 const router = require('express').Router();
 const db     = require('../db');
+const auth   = require('../middleware/auth');
+
+router.use(auth);
 
 // GET check-ins por data (ex: /api/checkins?date=2026-05-11)
 router.get('/', async (req, res) => {

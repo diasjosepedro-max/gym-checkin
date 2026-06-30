@@ -1,5 +1,8 @@
 const router = require('express').Router();
 const db     = require('../db');
+const auth   = require('../middleware/auth');
+
+router.use(auth);
 
 // GET pagamentos por mês (ex: /api/payments?month=2026-05)
 router.get('/', async (req, res) => {
