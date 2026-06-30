@@ -46,7 +46,7 @@ app.use('/api/trainings',  require('./routes/trainings'));
 app.get('/health', (req, res) => res.json({ status: 'GYM API online' }));
 
 // SPA fallback — serve React app for all non-API routes
-app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+app.get('/{*splat}', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Servidor a correr na porta ${PORT}`));
