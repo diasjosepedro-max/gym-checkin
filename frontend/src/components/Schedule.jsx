@@ -4,7 +4,7 @@ import api from '../api';
 
 const DAYS   = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
 const DSHORT = ['SEG','TER','QUA','QUI','SEX','SÁB','DOM'];
-const PALETTE = ['#85a800','#e74c3c','#1abc9c','#f39c12','#8e44ad','#e67e22','#16a085','#e91e63','#2980b9','#d35400','#27ae60','#f1c40f'];
+const PALETTE = ['#C49A2A','#e74c3c','#1abc9c','#f39c12','#8e44ad','#e67e22','#16a085','#e91e63','#2980b9','#d35400','#27ae60','#f1c40f'];
 const S = 6, E = 22, PX = 60, TW = 44, CW = 130;
 
 function todayKey() { return new Date().toISOString().slice(0,10); }

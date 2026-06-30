@@ -23,14 +23,25 @@ export default function Login({ onLogin }) {
 
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)' }}>
-      <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:16, padding:32, width:'100%', maxWidth:380, boxShadow:'0 4px 24px rgba(0,0,0,.08)' }}>
+      <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:20, padding:'36px 32px', width:'100%', maxWidth:380, boxShadow:'0 8px 40px rgba(140,100,30,.14)' }}>
 
         {/* Logo */}
-        <div style={{ textAlign:'center', marginBottom:32 }}>
-          <div style={{ fontWeight:900, fontSize:32, letterSpacing:4 }}>
-            <span style={{ color:'var(--accent)' }}>●</span> GYM
+        <div style={{ textAlign:'center', marginBottom:36 }}>
+          <div style={{
+            width:56, height:56, borderRadius:'50%',
+            background:'var(--accent)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            margin:'0 auto 14px',
+            boxShadow:'0 4px 16px rgba(196,154,42,.35)'
+          }}>
+            <span style={{ fontFamily:'Playfair Display, Georgia, serif', fontWeight:700, fontSize:26, color:'#fff' }}>H</span>
           </div>
-          <div style={{ fontFamily:'monospace', fontSize:10, color:'var(--muted)', letterSpacing:3, marginTop:4 }}>CHECK-IN</div>
+          <div style={{ fontFamily:'Playfair Display, Georgia, serif', fontWeight:700, fontSize:26, letterSpacing:5, color:'var(--text)', textTransform:'uppercase' }}>
+            Habitus
+          </div>
+          <div style={{ fontFamily:'Barlow Condensed, sans-serif', fontSize:10, color:'var(--muted)', letterSpacing:3, marginTop:4, textTransform:'uppercase' }}>
+            Personal Training Studio
+          </div>
         </div>
 
         <form onSubmit={handleSubmit}>

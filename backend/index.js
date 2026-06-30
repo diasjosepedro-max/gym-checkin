@@ -1,6 +1,7 @@
 const express   = require('express');
 const cors      = require('cors');
 const rateLimit = require('express-rate-limit');
+const path      = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -17,6 +18,9 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+const distPath = path.join(__dirname, '../frontend/dist');
+app.use(express.static(distPath));
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -39,7 +43,10 @@ app.use('/api/finance',    require('./routes/finance'));
 app.use('/api/trainings',  require('./routes/trainings'));
 
 // Health check
-app.get('/', (req, res) => res.json({ status: 'GYM API online' }));
+app.get('/health', (req, res) => res.json({ status: 'GYM API online' }));
+
+// SPA fallback — serve React app for all non-API routes
+app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Servidor a correr na porta ${PORT}`));

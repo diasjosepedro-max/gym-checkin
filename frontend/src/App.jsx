@@ -76,12 +76,18 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div class="header-inner">
-          <div className="logo"><span>●</span> GYM<span className="logo-sub">CHECK-IN</span></div>
+          <div className="logo">
+            <img src="/IMG-20251118-WA0009.jpg" alt="Habitus" className="logo-img" />
+            <div className="logo-text-wrap">
+              <span className="logo-name">Habitus</span>
+              <span className="logo-sub">Personal Training Studio</span>
+            </div>
+          </div>
           <nav className="nav">
             {navItems.map(({ key, label }) => (
               <button key={key} className={view===key ? 'active' : ''} onClick={() => setView(key)}>{label}</button>
             ))}
-            <button onClick={handleLogout} style={{ color:'var(--red)', fontSize:11 }}>Sair</button>
+            <button onClick={handleLogout} className="nav-logout">Sair</button>
           </nav>
         </div>
       </header>
