@@ -27,15 +27,11 @@ export default function Login({ onLogin }) {
 
         {/* Logo */}
         <div style={{ textAlign:'center', marginBottom:36 }}>
-          <div style={{
-            width:56, height:56, borderRadius:'50%',
-            background:'var(--accent)',
-            display:'flex', alignItems:'center', justifyContent:'center',
-            margin:'0 auto 14px',
-            boxShadow:'0 4px 16px rgba(196,154,42,.35)'
-          }}>
-            <span style={{ fontFamily:'Playfair Display, Georgia, serif', fontWeight:700, fontSize:26, color:'#fff' }}>H</span>
-          </div>
+          <img
+            src="/IMG-20251118-WA0009.jpg"
+            alt="Habitus"
+            style={{ width:72, height:72, borderRadius:'50%', objectFit:'cover', margin:'0 auto 14px', display:'block', boxShadow:'0 4px 16px rgba(196,154,42,.35)' }}
+          />
           <div style={{ fontFamily:'Playfair Display, Georgia, serif', fontWeight:700, fontSize:26, letterSpacing:5, color:'var(--text)', textTransform:'uppercase' }}>
             Habitus
           </div>
