@@ -44,6 +44,17 @@ export default function Admin({ members, teachers, classes, reload }) {
   const [nuName, setNuName]   = useState('');
   const [nuMsg, setNuMsg]     = useState('');
 
+  // Controlo de ações em curso (previne duplo clique)
+  const [busy, setBusy] = useState(new Set());
+  const isBusy = k => busy.has(k);
+  const run = async (key, fn) => {
+    if (busy.has(key)) return;
+    setBusy(p => new Set(p).add(key));
+    try { await fn(); } finally {
+      setBusy(p => { const s = new Set(p); s.delete(key); return s; });
+    }
+  };
+
   const today = new Date().toISOString().slice(0,10);
 
   useEffect(() => { loadFinancialClients(); }, []);
@@ -80,32 +91,32 @@ export default function Admin({ members, teachers, classes, reload }) {
   }
   async function saveMemberName(id) {
     if (!editingMemberName.trim()) return;
-    await updateMember(id, { name: editingMemberName.trim() });
-    setEditingMemberId(null);
-    setEditingMemberName('');
-    await reload();
+    await run(`save-m-${id}`, async () => {
+      await updateMember(id, { name: editingMemberName.trim() });
+      setEditingMemberId(null); setEditingMemberName('');
+      await reload();
+    });
   }
 
   async function addMember() {
     if (!nmForm.name.trim()) return;
-    await createMember({
-      name: nmForm.name.trim(),
-      type: nmForm.type,
-      sessions: nmForm.sessions,
-      has_pack: nmForm.has_pack,
-      has_insurance: nmForm.has_insurance,
-      professor_id: nmForm.professor_id || null,
-      standard_value: Number(nmForm.standard_value) || 0,
-      value_to_professor: Number(nmForm.value_to_professor) || 0,
+    await run('add-member', async () => {
+      await createMember({
+        name: nmForm.name.trim(), type: nmForm.type, sessions: nmForm.sessions,
+        has_pack: nmForm.has_pack, has_insurance: nmForm.has_insurance,
+        professor_id: nmForm.professor_id || null,
+        standard_value: Number(nmForm.standard_value) || 0,
+        value_to_professor: Number(nmForm.value_to_professor) || 0,
+      });
+      setNmForm({ name:'', type:'PT', sessions:'1x', has_pack:false, has_insurance:false, professor_id:'', standard_value:'', value_to_professor:'' });
+      await reload();
     });
-    setNmForm({ name:'', type:'PT', sessions:'1x', has_pack:false, has_insurance:false, professor_id:'', standard_value:'', value_to_professor:'' });
-    await reload();
   }
 
   // ── Professores ──────────────────────────────────────────────────────
   async function addTeacher() {
     if (!ntName.trim()) return;
-    await createTeacher(ntName.trim()); setNtName(''); await reload();
+    await run('add-teacher', async () => { await createTeacher(ntName.trim()); setNtName(''); await reload(); });
   }
 
   // ── Aulas ────────────────────────────────────────────────────────────
@@ -117,13 +128,15 @@ export default function Admin({ members, teachers, classes, reload }) {
 
   async function addNewClass() {
     if (!ncForm.name.trim()) return;
-    const { data: cls } = await createClass({ ...ncForm, teacher_id: ncForm.teacher_id||null });
-    if (ncMembersSelected.length) {
-      await api.post(`/classes/${cls.id}/set-financial-members`, { financial_client_ids: ncMembersSelected });
-    }
-    setNcForm({ name:'', day:0, time:'08:00', duration:60, teacher_id:'', color:PALETTE[0] });
-    setNcMembersSelected([]); setNcAddMember(''); setNcFilter('all');
-    await reload();
+    await run('add-class', async () => {
+      const { data: cls } = await createClass({ ...ncForm, teacher_id: ncForm.teacher_id||null });
+      if (ncMembersSelected.length) {
+        await api.post(`/classes/${cls.id}/set-financial-members`, { financial_client_ids: ncMembersSelected });
+      }
+      setNcForm({ name:'', day:0, time:'08:00', duration:60, teacher_id:'', color:PALETTE[0] });
+      setNcMembersSelected([]); setNcAddMember(''); setNcFilter('all');
+      await reload();
+    });
   }
 
   function openClassEdit(cls) {
@@ -139,26 +152,32 @@ export default function Admin({ members, teachers, classes, reload }) {
   }
 
   async function saveClassMembers(cls) {
-    await api.post(`/classes/${cls.id}/set-financial-members`, { financial_client_ids: classMembersEdit });
-    setClassEdit(null); setClassAddMember('');
-    await reload();
+    await run(`save-cls-${cls.id}`, async () => {
+      await api.post(`/classes/${cls.id}/set-financial-members`, { financial_client_ids: classMembersEdit });
+      setClassEdit(null); setClassAddMember('');
+      await reload();
+    });
   }
 
   // ── Check-ins ────────────────────────────────────────────────────────
   async function cancelCheckin(classId, memberId) {
-    await deleteCheckin({ class_id: classId, member_id: memberId, date: today });
-    await loadCheckins(); await reload();
+    await run(`ci-${classId}-${memberId}`, async () => {
+      await deleteCheckin({ class_id: classId, member_id: memberId, date: today });
+      await loadCheckins(); await reload();
+    });
   }
 
   // ── Utilizadores ─────────────────────────────────────────────────────
   async function createUser() {
     if (!nuEmail.trim()||!nuPass.trim()) return;
-    try {
-      await api.post('/auth/register',{ email:nuEmail, password:nuPass, name:nuName });
-      setNuMsg('✓ Utilizador criado!'); setNuEmail(''); setNuPass(''); setNuName('');
-      loadUsers();
-    } catch(e) { setNuMsg('✗ '+(e.response?.data?.error||'Erro')); }
-    setTimeout(()=>setNuMsg(''),3000);
+    await run('create-user', async () => {
+      try {
+        await api.post('/auth/register',{ email:nuEmail, password:nuPass, name:nuName });
+        setNuMsg('✓ Utilizador criado!'); setNuEmail(''); setNuPass(''); setNuName('');
+        loadUsers();
+      } catch(e) { setNuMsg('✗ '+(e.response?.data?.error||'Erro')); }
+      setTimeout(()=>setNuMsg(''),3000);
+    });
   }
 
   const inp = { background:'var(--card2)', border:'1px solid var(--border2)', borderRadius:8, color:'var(--text)', padding:'9px 12px', fontFamily:'Space Mono,monospace', fontSize:12, outline:'none', width:'100%' };
@@ -249,7 +268,7 @@ export default function Admin({ members, teachers, classes, reload }) {
               addVal={ncAddMember} setAddVal={setNcAddMember}
               filter={ncFilter} setFilter={setNcFilter}
             />
-            <button className="green-btn" style={{marginTop:14}} onClick={addNewClass}>CRIAR AULA</button>
+            <button disabled={isBusy('add-class')} className="green-btn" style={{marginTop:14}} onClick={addNewClass}>{isBusy('add-class')?'…':'CRIAR AULA'}</button>
           </div>
 
           {DAYS.map((day,idx)=>{
@@ -264,7 +283,7 @@ export default function Admin({ members, teachers, classes, reload }) {
                       <span className="cls-row-time" style={{color:cls.color}}>{cls.time}</span>
                       <span className="cls-row-dur">{cls.duration}min</span>
                     </div>
-                    <button className="del-btn" onClick={async()=>{await deleteClass(cls.id);await reload();}}>REMOVER</button>
+                    <button disabled={isBusy(`del-cls-${cls.id}`)} className="del-btn" onClick={()=>run(`del-cls-${cls.id}`,async()=>{await deleteClass(cls.id);await reload();})}>{isBusy(`del-cls-${cls.id}`)?'…':'REMOVER'}</button>
                   </div>
 
                   {classEdit === cls.id ? (
@@ -279,7 +298,7 @@ export default function Admin({ members, teachers, classes, reload }) {
                         />
                       </div>
                       <div style={{display:'flex',gap:6}}>
-                        <button onClick={()=>saveClassMembers(cls)} style={{background:'var(--green-bg)',border:'1px solid var(--green-b)',color:'var(--green)',borderRadius:6,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>✓ GUARDAR</button>
+                        <button disabled={isBusy(`save-cls-${cls.id}`)} onClick={()=>saveClassMembers(cls)} style={{background:'var(--green-bg)',border:'1px solid var(--green-b)',color:'var(--green)',borderRadius:6,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>{isBusy(`save-cls-${cls.id}`)?'…':'✓ GUARDAR'}</button>
                         <button onClick={()=>{setClassEdit(null);setClassAddMember('');}} style={{background:'none',border:'1px solid var(--border)',color:'var(--muted)',borderRadius:6,padding:'5px 12px',fontSize:11,cursor:'pointer'}}>CANCELAR</button>
                       </div>
                     </div>
@@ -361,7 +380,7 @@ export default function Admin({ members, teachers, classes, reload }) {
                 Tem Seguro
               </label>
             </div>
-            <button className="green-btn" onClick={addMember}>ADICIONAR MEMBRO</button>
+            <button disabled={isBusy('add-member')} className="green-btn" onClick={addMember}>{isBusy('add-member')?'…':'ADICIONAR MEMBRO'}</button>
           </div>
           {members.map(m=>(
             <div key={m.id} className="card" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',marginBottom:8}}>
@@ -376,7 +395,7 @@ export default function Admin({ members, teachers, classes, reload }) {
                       autoFocus
                       style={{fontSize:14,padding:'6px 10px',maxWidth:220}}
                     />
-                    <button className="green-btn" onClick={()=>saveMemberName(m.id)} style={{padding:'6px 14px',fontSize:12}}>✓</button>
+                    <button disabled={isBusy(`save-m-${m.id}`)} className="green-btn" onClick={()=>saveMemberName(m.id)} style={{padding:'6px 14px',fontSize:12}}>{isBusy(`save-m-${m.id}`)?'…':'✓'}</button>
                     <button className="del-btn" onClick={cancelEditMember} style={{padding:'6px 10px'}}>✕</button>
                   </div>
                 ) : (
@@ -394,7 +413,7 @@ export default function Admin({ members, teachers, classes, reload }) {
                 </div>
               </div>
               {editingMemberId !== m.id && (
-                <button className="del-btn" onClick={async()=>{await deleteMember(m.id);await reload();}}>REMOVER</button>
+                <button disabled={isBusy(`del-m-${m.id}`)} className="del-btn" onClick={()=>run(`del-m-${m.id}`,async()=>{await deleteMember(m.id);await reload();})}>{isBusy(`del-m-${m.id}`)?'…':'REMOVER'}</button>
               )}
             </div>
           ))}
@@ -407,13 +426,13 @@ export default function Admin({ members, teachers, classes, reload }) {
           <div className="card"><div className="card-title">NOVO PROFESSOR</div>
             <div style={{display:'flex',gap:10}}>
               <input className="input" placeholder="Nome do professor" value={ntName} onChange={e=>setNtName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTeacher()}/>
-              <button className="green-btn" onClick={addTeacher}>ADICIONAR</button>
+              <button disabled={isBusy('add-teacher')} className="green-btn" onClick={addTeacher}>{isBusy('add-teacher')?'…':'ADICIONAR'}</button>
             </div>
           </div>
           {teachers.map(t=>(
             <div key={t.id} className="card" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',marginBottom:8}}>
               <div style={{fontWeight:700,fontSize:17}}>{t.name}</div>
-              <button className="del-btn" onClick={async()=>{await deleteTeacher(t.id);await reload();}}>REMOVER</button>
+              <button disabled={isBusy(`del-t-${t.id}`)} className="del-btn" onClick={()=>run(`del-t-${t.id}`,async()=>{await deleteTeacher(t.id);await reload();})}>{isBusy(`del-t-${t.id}`)?'…':'REMOVER'}</button>
             </div>
           ))}
         </div>
@@ -439,7 +458,7 @@ export default function Admin({ members, teachers, classes, reload }) {
                     {items.map(ci=>(
                       <div key={ci.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--green-bg)',border:'1px solid var(--green-b)',borderRadius:8,marginBottom:6}}>
                         <span style={{fontWeight:700,fontSize:16,color:'var(--green)'}}>✓ {ci.member_name}</span>
-                        <button className="del-btn" onClick={()=>cancelCheckin(classId,ci.member_id)}>✕ REMOVER</button>
+                        <button disabled={isBusy(`ci-${classId}-${ci.member_id}`)} className="del-btn" onClick={()=>cancelCheckin(classId,ci.member_id)}>{isBusy(`ci-${classId}-${ci.member_id}`)?'…':'✕ REMOVER'}</button>
                       </div>
                     ))}
                   </div>
@@ -458,13 +477,13 @@ export default function Admin({ members, teachers, classes, reload }) {
             <div style={{marginBottom:12}}><div className="input-label">EMAIL</div><input className="input" type="email" placeholder="email@exemplo.com" value={nuEmail} onChange={e=>setNuEmail(e.target.value)}/></div>
             <div style={{marginBottom:16}}><div className="input-label">PASSWORD</div><input className="input" type="password" placeholder="••••••••" value={nuPass} onChange={e=>setNuPass(e.target.value)}/></div>
             {nuMsg&&<div style={{padding:'10px 14px',borderRadius:8,fontFamily:'monospace',fontSize:11,marginBottom:14,background:nuMsg.startsWith('✓')?'var(--green-bg)':'var(--red-bg)',color:nuMsg.startsWith('✓')?'var(--green)':'var(--red)',border:`1px solid ${nuMsg.startsWith('✓')?'var(--green-b)':'var(--red-b)'}`}}>{nuMsg}</div>}
-            <button className="green-btn" onClick={createUser}>CRIAR UTILIZADOR</button>
+            <button disabled={isBusy('create-user')} className="green-btn" onClick={createUser}>{isBusy('create-user')?'…':'CRIAR UTILIZADOR'}</button>
           </div>
           <div className="admin-day-title">UTILIZADORES COM ACESSO</div>
           {users.map(u=>(
             <div key={u.id} className="card" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',marginBottom:8}}>
               <div><div style={{fontWeight:700,fontSize:17}}>{u.name}</div><div style={{fontFamily:'monospace',fontSize:10,color:'var(--muted)',marginTop:2}}>{u.email}</div></div>
-              <button className="del-btn" onClick={async()=>{await api.delete(`/auth/users/${u.id}`);loadUsers();}}>REMOVER</button>
+              <button disabled={isBusy(`del-u-${u.id}`)} className="del-btn" onClick={()=>run(`del-u-${u.id}`,async()=>{await api.delete(`/auth/users/${u.id}`);loadUsers();})}>{isBusy(`del-u-${u.id}`)?'…':'REMOVER'}</button>
             </div>
           ))}
         </div>

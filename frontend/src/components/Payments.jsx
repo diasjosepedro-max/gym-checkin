@@ -6,6 +6,16 @@ const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','A
 export default function Payments({ members }) {
   const [date, setDate]       = useState(new Date());
   const [payments, setPayments] = useState([]);
+  const [busy, setBusy]        = useState(new Set());
+
+  const isBusy = k => busy.has(k);
+  const run = async (key, fn) => {
+    if (busy.has(key)) return;
+    setBusy(p => new Set(p).add(key));
+    try { await fn(); } finally {
+      setBusy(p => { const s = new Set(p); s.delete(key); return s; });
+    }
+  };
 
   const monthKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
   const isCurrent = monthKey === new Date().toISOString().slice(0,7);
@@ -20,8 +30,10 @@ export default function Payments({ members }) {
   useEffect(() => { load(); }, [monthKey]);
 
   async function toggle(memberId, paid) {
-    await setPayment({ member_id: memberId, month: monthKey, paid });
-    await load();
+    await run(`t${memberId}`, async () => {
+      await setPayment({ member_id: memberId, month: monthKey, paid });
+      await load();
+    });
   }
 
   function changeMonth(dir) {
@@ -77,9 +89,9 @@ export default function Payments({ members }) {
                 </div>
               </div>
               <div className="pay-toggle">
-                {isPaid && <button className="pay-btn mark-unpaid" onClick={() => toggle(m.id, false)}>Anular</button>}
-                <button className="pay-btn mark-paid" onClick={() => toggle(m.id, !isPaid)}>
-                  {isPaid ? '✓ Pago' : 'Marcar pago'}
+                {isPaid && <button disabled={isBusy(`t${m.id}`)} className="pay-btn mark-unpaid" onClick={() => toggle(m.id, false)}>Anular</button>}
+                <button disabled={isBusy(`t${m.id}`)} className="pay-btn mark-paid" onClick={() => toggle(m.id, !isPaid)}>
+                  {isBusy(`t${m.id}`) ? '…' : isPaid ? '✓ Pago' : 'Marcar pago'}
                 </button>
               </div>
             </div>

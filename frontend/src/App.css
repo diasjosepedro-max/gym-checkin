@@ -2,6 +2,7 @@
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 button{-webkit-appearance:none;appearance:none;cursor:pointer;touch-action:manipulation}
+button:disabled{opacity:.5;cursor:not-allowed;pointer-events:none}
 input,select{font-size:16px!important}
 
 :root{

@@ -43,6 +43,15 @@ export default function Schedule({ members, teachers, classes, reload }) {
   const [editing, setEditing]   = useState(false);
   const [editForm, setEditForm] = useState({});
   const [weekOnly, setWeekOnly] = useState(false);
+  const [busy, setBusy] = useState(new Set());
+  const isBusy = k => busy.has(k);
+  const run = async (key, fn) => {
+    if (busy.has(key)) return;
+    setBusy(p => new Set(p).add(key));
+    try { await fn(); } finally {
+      setBusy(p => { const s = new Set(p); s.delete(key); return s; });
+    }
+  };
   const today = todayKey();
   const tIdx  = todayIdx();
 
@@ -129,17 +138,21 @@ export default function Schedule({ members, teachers, classes, reload }) {
 
   async function doCheckIn() {
     if (!selMid || !modal) return;
-    await createCheckin({ class_id: modal.id, member_id: selMid, date: today });
-    await reload(); setSelMid(null);
-    const updated = effectiveClasses.find(c => c.id === modal.id);
-    if (updated) setModal(updated);
+    await run('checkin', async () => {
+      await createCheckin({ class_id: modal.id, member_id: selMid, date: today });
+      await reload(); setSelMid(null);
+      const updated = effectiveClasses.find(c => c.id === modal.id);
+      if (updated) setModal(updated);
+    });
   }
 
   async function doCancelCheckIn(classId, memberId) {
-    await deleteCheckin({ class_id: classId, member_id: memberId, date: today });
-    await reload();
-    const updated = effectiveClasses.find(c => c.id === classId);
-    if (updated) setModal(updated);
+    await run(`cc-${classId}-${memberId}`, async () => {
+      await deleteCheckin({ class_id: classId, member_id: memberId, date: today });
+      await reload();
+      const updated = effectiveClasses.find(c => c.id === classId);
+      if (updated) setModal(updated);
+    });
   }
 
   return (
@@ -290,7 +303,7 @@ export default function Schedule({ members, teachers, classes, reload }) {
                 )}
 
                 <div style={{ display:'flex', gap:8 }}>
-                  <button className="green-btn" onClick={saveEdit}>GUARDAR</button>
+                  <button disabled={isBusy('save-edit')} className="green-btn" onClick={()=>run('save-edit',saveEdit)}>{isBusy('save-edit')?'…':'GUARDAR'}</button>
                   <button onClick={() => setEditing(false)} style={{ background:'none', border:'1px solid var(--border)', color:'var(--muted)', borderRadius:8, padding:'6px 14px', fontSize:11, cursor:'pointer' }}>Cancelar</button>
                 </div>
               </div>
@@ -313,7 +326,7 @@ export default function Schedule({ members, teachers, classes, reload }) {
                           <div style={{ flex:1, padding:'11px 14px', background:`${color}15`, fontWeight:600, fontSize:16, display:'flex', alignItems:'center', gap:10, color }}>
                             <span>✓</span><span>{m.name}</span>
                           </div>
-                          <button onClick={() => doCancelCheckIn(modal.id, m.id)} style={{ background:'var(--red-bg)', border:'none', borderLeft:'1px solid var(--red-b)', color:'var(--red)', padding:'0 16px', fontFamily:'monospace', fontSize:10, fontWeight:700, cursor:'pointer', touchAction:'manipulation' }}>✕ ANULAR</button>
+                          <button disabled={isBusy(`cc-${modal.id}-${m.id}`)} onClick={() => doCancelCheckIn(modal.id, m.id)} style={{ background:'var(--red-bg)', border:'none', borderLeft:'1px solid var(--red-b)', color:'var(--red)', padding:'0 16px', fontFamily:'monospace', fontSize:10, fontWeight:700, cursor:'pointer', touchAction:'manipulation' }}>{isBusy(`cc-${modal.id}-${m.id}`)?'…':'✕ ANULAR'}</button>
                         </>
                       ) : (
                         <button onClick={() => { setSelMid(isSel ? null : m.id); }} style={{ width:'100%', background: isSel ? `${color}22` : 'var(--card2)', border:'none', color: isSel ? color : 'var(--text)', padding:'11px 14px', fontWeight:600, fontSize:16, cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:10, touchAction:'manipulation' }}>
@@ -327,8 +340,8 @@ export default function Schedule({ members, teachers, classes, reload }) {
                 })}
 
                 {selMid && (
-                  <button onClick={doCheckIn} style={{ width:'100%', padding:13, borderRadius:10, fontSize:16, marginTop:14, letterSpacing:2, fontWeight:700, textTransform:'uppercase', border:'none', cursor:'pointer', background: modal.color || '#85a800', color:'#fff', touchAction:'manipulation' }}>
-                    CONFIRMAR CHECK-IN
+                  <button disabled={isBusy('checkin')} onClick={doCheckIn} style={{ width:'100%', padding:13, borderRadius:10, fontSize:16, marginTop:14, letterSpacing:2, fontWeight:700, textTransform:'uppercase', border:'none', cursor:'pointer', background: modal.color || '#85a800', color:'#fff', touchAction:'manipulation' }}>
+                    {isBusy('checkin') ? '…' : 'CONFIRMAR CHECK-IN'}
                   </button>
                 )}
 
