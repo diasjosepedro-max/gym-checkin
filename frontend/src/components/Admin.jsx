@@ -226,7 +226,7 @@ export default function Admin({ members, teachers, classes, reload }) {
       <div className="sec-title"><span>ADMINISTRAÇÃO</span></div>
 
       <div className="tab-btns">
-        {[['classes','Aulas'],['teachers','Professores'],['checkins','Check-ins'],['users','Utilizadores']].map(([v,l])=>(
+        {[['classes','Aulas'],['members','Clientes'],['teachers','Professores'],['checkins','Check-ins'],['users','Utilizadores']].map(([v,l])=>(
           <button key={v} className={`tab-btn ${tab===v?'active':''}`} onClick={()=>handleTab(v)}>{l}</button>
         ))}
       </div>
