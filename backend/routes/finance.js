@@ -32,12 +32,21 @@ router.post('/clients', auth, async (req, res) => {
 router.put('/clients/:id', auth, async (req, res) => {
   try {
     const { name, type, sessions, active, has_pack, has_insurance, has_invoice, professor_id, standard_value, value_to_professor } = req.body;
+
+    const { rows: old } = await db.query('SELECT name FROM financial_clients WHERE id=$1', [req.params.id]);
+    const oldName = old[0]?.name;
+
     const { rows } = await db.query(`
       UPDATE financial_clients SET name=$1,type=$2,sessions=$3,active=$4,has_pack=$5,
       has_insurance=$6,has_invoice=$7,professor_id=$8,standard_value=$9,value_to_professor=$10
       WHERE id=$11 RETURNING *`,
       [name, type, sessions, active, has_pack, has_insurance, has_invoice||false, professor_id||null, standard_value, value_to_professor, req.params.id]
     );
+
+    if (oldName && name && oldName !== name) {
+      await db.query('UPDATE members SET name=$1 WHERE lower(trim(name))=lower(trim($2))', [name, oldName]);
+    }
+
     res.json(rows[0]);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

@@ -23,9 +23,11 @@ export default function Finance() {
   const [loading, setLoading]   = useState(true);
 
   // Edit states
-  const [editVal, setEditVal]         = useState(null); // {client_id}
+  const [editVal, setEditVal]         = useState(null);
   const [editForm, setEditForm]       = useState({});
   const [editSessVal, setEditSessVal] = useState({});
+  const [editingName, setEditingName] = useState(null); // client id
+  const [editNameVal, setEditNameVal] = useState('');
 
   // Novo cliente
   const [showNewClient, setShowNewClient] = useState(false);
@@ -81,6 +83,18 @@ export default function Finance() {
     const was = isPaid(client.id);
     const date = was ? '' : new Date().toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit',year:'numeric'});
     await api.post('/finance/payments',{client_id:client.id,month,year,paid:!was,payment_date:date});
+    await loadAll();
+  }
+
+  async function saveClientName(c) {
+    if (!editNameVal.trim() || editNameVal.trim() === c.name) { setEditingName(null); return; }
+    await api.put(`/finance/clients/${c.id}`, {
+      name: editNameVal.trim(), type: c.type, sessions: c.sessions, active: c.active,
+      has_pack: c.has_pack, has_insurance: c.has_insurance, has_invoice: c.has_invoice,
+      professor_id: c.professor_id || null, standard_value: c.standard_value,
+      value_to_professor: c.value_to_professor,
+    });
+    setEditingName(null);
     await loadAll();
   }
 
@@ -470,7 +484,24 @@ export default function Finance() {
                       <tr key={c.id} style={{opacity:p?0.55:1,borderBottom:isEditing?'none':'1px solid var(--border)'}}>
                         <td style={{padding:'10px 12px',fontSize:12}}>
                           <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-                            {c.name}
+                            {editingName === c.id ? (
+                              <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                                <input
+                                  autoFocus
+                                  value={editNameVal}
+                                  onChange={e=>setEditNameVal(e.target.value)}
+                                  onKeyDown={e=>{if(e.key==='Enter')saveClientName(c);if(e.key==='Escape')setEditingName(null);}}
+                                  style={{padding:'2px 7px',borderRadius:6,border:'1px solid var(--accent)',fontSize:12,fontFamily:'inherit',width:140}}
+                                />
+                                <button onClick={()=>saveClientName(c)} style={{background:'var(--green-bg)',border:'1px solid var(--green-b)',color:'var(--green)',borderRadius:5,padding:'2px 7px',fontSize:11,cursor:'pointer'}}>✓</button>
+                                <button onClick={()=>setEditingName(null)} style={{background:'none',border:'1px solid var(--border)',color:'var(--muted)',borderRadius:5,padding:'2px 6px',fontSize:11,cursor:'pointer'}}>✕</button>
+                              </div>
+                            ) : (
+                              <span style={{display:'flex',alignItems:'center',gap:4}}>
+                                {c.name}
+                                <button onClick={()=>{setEditingName(c.id);setEditNameVal(c.name);}} style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:11,padding:'0 2px',lineHeight:1}} title="Editar nome">✎</button>
+                              </span>
+                            )}
                             <span style={{background:tag.bg,color:tag.c,fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>{c.type}</span>
                             {c.has_pack&&<span style={{background:'#EAF3DE',color:'#3B6D11',fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>PACK</span>}
                             {c.has_insurance&&<span style={{background:'#E6F1FB',color:'#185FA5',fontSize:9,fontWeight:500,padding:'1px 5px',borderRadius:4}}>SEG</span>}
