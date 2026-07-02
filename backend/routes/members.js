@@ -57,6 +57,28 @@ router.post('/', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// PUT renomear membro (atualiza também financial_clients que liga por nome)
+router.put('/:id', async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Nome obrigatório' });
+
+    const { rows: cur } = await db.query('SELECT name FROM members WHERE id=$1', [req.params.id]);
+    if (!cur.length) return res.status(404).json({ error: 'Membro não encontrado' });
+
+    const newName = name.trim();
+    const oldName = cur[0].name;
+
+    const { rows } = await db.query('UPDATE members SET name=$1 WHERE id=$2 RETURNING *', [newName, req.params.id]);
+    await db.query(
+      'UPDATE financial_clients SET name=$1 WHERE lower(trim(name))=lower(trim($2))',
+      [newName, oldName]
+    );
+
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // DELETE remover membro
 router.delete('/:id', async (req, res) => {
   try {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { createMember, deleteMember, createTeacher, deleteTeacher, createClass, deleteClass, getCheckins, deleteCheckin } from '../api';
+import { createMember, updateMember, deleteMember, createTeacher, deleteTeacher, createClass, deleteClass, getCheckins, deleteCheckin } from '../api';
 import api from '../api';
 
 const DAYS    = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
@@ -12,6 +12,10 @@ export default function Admin({ members, teachers, classes, reload }) {
 
   // Clientes financeiros (fonte de verdade para membros de aulas)
   const [financialClients, setFinancialClients] = useState([]);
+
+  // Edição inline de nome de membro
+  const [editingMemberId, setEditingMemberId]   = useState(null);
+  const [editingMemberName, setEditingMemberName] = useState('');
 
   // Nova aula
   const [ncForm, setNcForm]               = useState({ name:'', day:0, time:'08:00', duration:60, teacher_id:'', color:PALETTE[0] });
@@ -66,6 +70,22 @@ export default function Admin({ members, teachers, classes, reload }) {
   }
 
   // ── Membros ──────────────────────────────────────────────────────────
+  function startEditMember(m) {
+    setEditingMemberId(m.id);
+    setEditingMemberName(m.name);
+  }
+  function cancelEditMember() {
+    setEditingMemberId(null);
+    setEditingMemberName('');
+  }
+  async function saveMemberName(id) {
+    if (!editingMemberName.trim()) return;
+    await updateMember(id, { name: editingMemberName.trim() });
+    setEditingMemberId(null);
+    setEditingMemberName('');
+    await reload();
+  }
+
   async function addMember() {
     if (!nmForm.name.trim()) return;
     await createMember({
@@ -345,13 +365,37 @@ export default function Admin({ members, teachers, classes, reload }) {
           </div>
           {members.map(m=>(
             <div key={m.id} className="card" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',marginBottom:8}}>
-              <div>
-                <div style={{fontWeight:700,fontSize:17}}>{m.name}</div>
+              <div style={{flex:1,minWidth:0}}>
+                {editingMemberId === m.id ? (
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <input
+                      className="input"
+                      value={editingMemberName}
+                      onChange={e=>setEditingMemberName(e.target.value)}
+                      onKeyDown={e=>{ if(e.key==='Enter') saveMemberName(m.id); if(e.key==='Escape') cancelEditMember(); }}
+                      autoFocus
+                      style={{fontSize:14,padding:'6px 10px',maxWidth:220}}
+                    />
+                    <button className="green-btn" onClick={()=>saveMemberName(m.id)} style={{padding:'6px 14px',fontSize:12}}>✓</button>
+                    <button className="del-btn" onClick={cancelEditMember} style={{padding:'6px 10px'}}>✕</button>
+                  </div>
+                ) : (
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{fontWeight:700,fontSize:17}}>{m.name}</div>
+                    <button
+                      onClick={()=>startEditMember(m)}
+                      style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13,padding:'2px 4px',lineHeight:1}}
+                      title="Editar nome"
+                    >✎</button>
+                  </div>
+                )}
                 <div style={{fontFamily:'monospace',fontSize:10,color:'var(--muted)',marginTop:2}}>
                   {classes.filter(c=>c.allowed_members?.some(x=>x.id===m.id)).length} aulas com acesso
                 </div>
               </div>
-              <button className="del-btn" onClick={async()=>{await deleteMember(m.id);await reload();}}>REMOVER</button>
+              {editingMemberId !== m.id && (
+                <button className="del-btn" onClick={async()=>{await deleteMember(m.id);await reload();}}>REMOVER</button>
+              )}
             </div>
           ))}
         </div>
