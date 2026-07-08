@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { createCheckin, deleteCheckin, getPayments } from '../api';
 import api from '../api';
 
 const DAYS   = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
@@ -36,10 +35,10 @@ function positionClasses(dayCls) {
 }
 
 export default function Schedule({ members, teachers, classes, reload }) {
-  const [modal, setModal]     = useState(null);
-  const [selMid, setSelMid]   = useState(null);
-  const [payments, setPayments] = useState({});
-  const [overrides, setOverrides] = useState([]);
+  const [modal, setModal]           = useState(null);
+  const [overrides, setOverrides]   = useState([]);
+  const [financialClients, setFinancialClients] = useState([]);
+  const [addClientVal, setAddClientVal]         = useState('');
   const [editing, setEditing]   = useState(false);
   const [editForm, setEditForm] = useState({});
   const [weekOnly, setWeekOnly] = useState(false);
@@ -55,7 +54,14 @@ export default function Schedule({ members, teachers, classes, reload }) {
   const today = todayKey();
   const tIdx  = todayIdx();
 
-  useEffect(() => { loadOverrides(); }, []);
+  useEffect(() => { loadOverrides(); loadFinancialClients(); }, []);
+
+  useEffect(() => {
+    if (modal && !editing) {
+      const updated = effectiveClasses.find(c => c.id === modal.id);
+      if (updated) setModal(updated);
+    }
+  }, [classes]);
 
   async function loadOverrides() {
     try {
@@ -71,15 +77,17 @@ export default function Schedule({ members, teachers, classes, reload }) {
     return { ...c, name: ov.name ?? c.name, time: ov.time ?? c.time, duration: ov.duration ?? c.duration, color: ov.color ?? c.color, teacher_id: ov.teacher_id ?? c.teacher_id, teacher_name: ov.teacher_name ?? c.teacher_name };
   });
 
-  async function openModal(cls) {
-    const month = today.slice(0,7);
+  async function loadFinancialClients() {
     try {
-      const { data } = await getPayments(month);
-      const pm = {};
-      data.forEach(p => { pm[p.member_id] = p.paid; });
-      setPayments(pm);
+      const { data } = await api.get('/finance/clients');
+      setFinancialClients(data.filter(c => c.active));
     } catch {}
-    setModal(cls); setSelMid(null); setEditing(false);
+  }
+
+  function openModal(cls) {
+    setModal(cls);
+    setEditing(false);
+    setAddClientVal('');
   }
 
   function openEdit() {
@@ -136,26 +144,46 @@ export default function Schedule({ members, teachers, classes, reload }) {
     }
   }
 
-  async function doCheckIn() {
-    if (!selMid || !modal) return;
-    await run('checkin', async () => {
-      await createCheckin({ class_id: modal.id, member_id: selMid, date: today });
-      const member = members.find(m => m.id === selMid);
+  async function addToClass() {
+    if (!addClientVal || !modal) return;
+    const fc = financialClients.find(c => c.id === addClientVal);
+    if (!fc) return;
+    await run(`add-${modal.id}`, async () => {
       setModal(prev => ({
         ...prev,
-        checkedIn: [...(prev.checkedIn || []), { member_id: selMid, member_name: member?.name, date: today }],
+        allowed_members: [...(prev.allowed_members || []), { id: 'tmp-' + fc.id, name: fc.name }],
       }));
-      setSelMid(null);
+      setAddClientVal('');
+      const currentFcIds = (modal.allowed_members || []).map(m => {
+        const f = financialClients.find(c => c.name.toLowerCase().trim() === m.name.toLowerCase().trim());
+        return f?.id;
+      }).filter(Boolean);
+      await api.post(`/classes/${modal.id}/set-financial-members`, {
+        financial_client_ids: [...new Set([...currentFcIds, addClientVal])],
+      });
+      await reload();
     });
   }
 
-  async function doCancelCheckIn(classId, memberId) {
-    await run(`cc-${classId}-${memberId}`, async () => {
-      await deleteCheckin({ class_id: classId, member_id: memberId, date: today });
+  async function removeFromClass(member) {
+    if (!modal) return;
+    await run(`rem-${member.id}`, async () => {
       setModal(prev => ({
         ...prev,
-        checkedIn: (prev.checkedIn || []).filter(ci => ci.member_id !== memberId),
+        allowed_members: (prev.allowed_members || []).filter(m => m.id !== member.id),
       }));
+      const remainingFcIds = (modal.allowed_members || [])
+        .filter(m => m.id !== member.id)
+        .map(m => {
+          const f = financialClients.find(c => c.name.toLowerCase().trim() === m.name.toLowerCase().trim());
+          return f?.id;
+        }).filter(Boolean);
+      try {
+        await api.post(`/classes/${modal.id}/set-financial-members`, { financial_client_ids: remainingFcIds });
+        await reload();
+      } catch {
+        await reload();
+      }
     });
   }
 
@@ -206,9 +234,7 @@ export default function Schedule({ members, teachers, classes, reload }) {
                 {positionClasses(dayCls).map(({ cls, lp, wp }) => {
                   const top  = toMins(cls.time) - S*60;
                   const h    = Math.max(cls.duration, 22);
-                  const ci   = (cls.checkedIn || []).filter(ci => ci.date?.slice(0,10) === today).length;
                   const total = (cls.allowed_members || []).length;
-                  const pct  = total > 0 ? (ci/total)*100 : 0;
                   const color = cls.color || '#85a800';
                   const compact = h < 50;
                   const hasOverride = overrides.some(o => o.class_id === cls.id);
@@ -220,7 +246,7 @@ export default function Schedule({ members, teachers, classes, reload }) {
                         {hasOverride && <span style={{ fontSize:8, marginLeft:3, opacity:.7 }}>~</span>}
                       </div>
                       <div style={{ fontFamily:'monospace', fontSize:compact?8:9, color, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{cls.time}</div>
-                      {h >= 54 && <><div style={{ height:2, background:'rgba(0,0,0,.1)', borderRadius:1, marginTop:4, overflow:'hidden' }}><div style={{ height:'100%', width:`${pct}%`, background:color }}/></div><div style={{ fontFamily:'monospace', fontSize:8, color:'var(--muted)', marginTop:2 }}>{ci}/{total}</div></>}
+                      {h >= 54 && total > 0 && <div style={{ fontFamily:'monospace', fontSize:8, color:'var(--muted)', marginTop:3 }}>{total} cliente{total !== 1 ? 's' : ''}</div>}
                     </div>
                   );
                 })}
@@ -313,52 +339,41 @@ export default function Schedule({ members, teachers, classes, reload }) {
               </div>
             )}
 
-            {/* Modo check-in */}
+            {/* Alocação de clientes */}
             {!editing && (
               <>
-                <div className="modal-label">SELECIONA O TEU NOME</div>
-                {(modal.allowed_members || []).map(m => {
-                  const checked = (modal.checkedIn || []).some(ci => ci.member_id === m.id && ci.date?.slice(0,10) === today);
-                  const isSel   = selMid === m.id;
-                  const unpaid  = !payments[m.id];
-                  const color   = modal.color || '#85a800';
-
-                  return (
-                    <div key={m.id} style={{ display:'flex', alignItems:'stretch', marginBottom:7, borderRadius:10, overflow:'hidden', border:'1px solid var(--border)' }}>
-                      {checked ? (
-                        <>
-                          <div style={{ flex:1, padding:'11px 14px', background:`${color}15`, fontWeight:600, fontSize:16, display:'flex', alignItems:'center', gap:10, color }}>
-                            <span>✓</span><span>{m.name}</span>
-                          </div>
-                          <button disabled={isBusy(`cc-${modal.id}-${m.id}`)} onClick={() => doCancelCheckIn(modal.id, m.id)} style={{ background:'var(--red-bg)', border:'none', borderLeft:'1px solid var(--red-b)', color:'var(--red)', padding:'0 16px', fontFamily:'monospace', fontSize:10, fontWeight:700, cursor:'pointer', touchAction:'manipulation' }}>{isBusy(`cc-${modal.id}-${m.id}`)?'…':'✕ ANULAR'}</button>
-                        </>
-                      ) : (
-                        <button onClick={() => { setSelMid(isSel ? null : m.id); }} style={{ width:'100%', background: isSel ? `${color}22` : 'var(--card2)', border:'none', color: isSel ? color : 'var(--text)', padding:'11px 14px', fontWeight:600, fontSize:16, cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:10, touchAction:'manipulation' }}>
-                          <span>{isSel ? '●' : '○'}</span>
-                          <span style={{ color: unpaid && !isSel ? 'var(--red)' : undefined }}>{m.name}</span>
-                          {unpaid && !isSel && <span style={{ marginLeft:'auto', fontSize:9, fontFamily:'monospace', background:'var(--red-bg)', color:'var(--red)', border:'1px solid var(--red-b)', borderRadius:6, padding:'2px 6px' }}>💳 NÃO PAGO</span>}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {selMid && (
-                  <button disabled={isBusy('checkin')} onClick={doCheckIn} style={{ width:'100%', padding:13, borderRadius:10, fontSize:16, marginTop:14, letterSpacing:2, fontWeight:700, textTransform:'uppercase', border:'none', cursor:'pointer', background: modal.color || '#85a800', color:'#fff', touchAction:'manipulation' }}>
-                    {isBusy('checkin') ? '…' : 'CONFIRMAR CHECK-IN'}
-                  </button>
-                )}
-
-                <div style={{ marginTop:14, borderTop:'1px solid var(--border)', paddingTop:12 }}>
-                  <div className="modal-label">CHECK-INS HOJE</div>
-                  {(modal.checkedIn || []).filter(ci => ci.date?.slice(0,10) === today).length === 0
-                    ? <span style={{ color:'var(--dim)', fontFamily:'monospace', fontSize:11 }}>Nenhum ainda</span>
-                    : (modal.checkedIn || []).filter(ci => ci.date?.slice(0,10) === today).map(ci => (
-                        <span key={ci.member_id} style={{ display:'inline-flex', alignItems:'center', borderRadius:20, padding:'4px 10px', fontFamily:'monospace', fontSize:11, margin:3, background:`${modal.color}22`, border:`1px solid ${modal.color}55`, color: modal.color }}>
-                          {ci.member_name || members.find(m => m.id === ci.member_id)?.name}
-                        </span>
-                      ))
-                  }
+                <div className="modal-label">CLIENTES ALOCADOS</div>
+                {(modal.allowed_members || []).length === 0
+                  ? <p style={{ fontFamily:'monospace', fontSize:11, color:'var(--muted)', margin:'4px 0 12px' }}>Nenhum cliente alocado</p>
+                  : (modal.allowed_members || []).map(m => (
+                      <div key={m.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'9px 12px', background:'var(--card2)', border:'1px solid var(--border)', borderRadius:8, marginBottom:6 }}>
+                        <span style={{ fontWeight:600, fontSize:15 }}>{m.name}</span>
+                        <button
+                          disabled={isBusy(`rem-${m.id}`)}
+                          onClick={() => removeFromClass(m)}
+                          style={{ background:'var(--red-bg)', border:'1px solid var(--red-b)', color:'var(--red)', borderRadius:6, padding:'3px 10px', fontSize:10, fontWeight:700, cursor:'pointer' }}
+                        >{isBusy(`rem-${m.id}`) ? '…' : '✕ REMOVER'}</button>
+                      </div>
+                    ))
+                }
+                <div style={{ display:'flex', gap:8, marginTop:12, alignItems:'center' }}>
+                  <select
+                    value={addClientVal}
+                    onChange={e => setAddClientVal(e.target.value)}
+                    className="input"
+                    style={{ flex:1, fontSize:12, padding:'8px 10px' }}
+                  >
+                    <option value="">— adicionar cliente —</option>
+                    {financialClients
+                      .filter(fc => !(modal.allowed_members||[]).some(m => m.name.toLowerCase().trim() === fc.name.toLowerCase().trim()))
+                      .map(fc => <option key={fc.id} value={fc.id}>{fc.name}</option>)
+                    }
+                  </select>
+                  <button
+                    disabled={!addClientVal || isBusy(`add-${modal.id}`)}
+                    onClick={addToClass}
+                    style={{ background:'var(--accent-bg)', border:'1px solid var(--accent)', color:'var(--accent)', borderRadius:8, padding:'8px 16px', fontSize:14, fontWeight:700, cursor:'pointer' }}
+                  >{isBusy(`add-${modal.id}`) ? '…' : '+'}</button>
                 </div>
               </>
             )}

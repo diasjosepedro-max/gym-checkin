@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { createMember, updateMember, deleteMember, createTeacher, deleteTeacher, createClass, deleteClass, getCheckins, deleteCheckin } from '../api';
+import { createMember, updateMember, deleteMember, createTeacher, deleteTeacher, createClass, deleteClass } from '../api';
 import api from '../api';
 
 const DAYS    = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
@@ -7,7 +7,6 @@ const PALETTE = ['#C49A2A','#e74c3c','#1abc9c','#f39c12','#8e44ad','#e67e22','#1
 
 export default function Admin({ members, teachers, classes, reload }) {
   const [tab, setTab]           = useState('classes');
-  const [checkins, setCheckins] = useState([]);
   const [users, setUsers]       = useState([]);
 
   // Clientes financeiros (fonte de verdade para membros de aulas)
@@ -66,18 +65,13 @@ export default function Admin({ members, teachers, classes, reload }) {
     } catch(e) {}
   }
 
-  async function loadCheckins() {
-    const { data } = await getCheckins(today);
-    setCheckins(data);
-  }
   async function loadUsers() {
     const { data } = await api.get('/auth/users');
     setUsers(data);
   }
   function handleTab(t) {
     setTab(t);
-    if (t==='checkins') loadCheckins();
-    if (t==='users')    loadUsers();
+    if (t==='users') loadUsers();
   }
 
   // ── Membros ──────────────────────────────────────────────────────────
@@ -159,14 +153,6 @@ export default function Admin({ members, teachers, classes, reload }) {
     });
   }
 
-  // ── Check-ins ────────────────────────────────────────────────────────
-  async function cancelCheckin(classId, memberId) {
-    await run(`ci-${classId}-${memberId}`, async () => {
-      await deleteCheckin({ class_id: classId, member_id: memberId, date: today });
-      await loadCheckins(); await reload();
-    });
-  }
-
   // ── Utilizadores ─────────────────────────────────────────────────────
   async function createUser() {
     if (!nuEmail.trim()||!nuPass.trim()) return;
@@ -226,7 +212,7 @@ export default function Admin({ members, teachers, classes, reload }) {
       <div className="sec-title"><span>ADMINISTRAÇÃO</span></div>
 
       <div className="tab-btns">
-        {[['classes','Aulas'],['members','Clientes'],['teachers','Professores'],['checkins','Check-ins'],['users','Utilizadores']].map(([v,l])=>(
+        {[['classes','Aulas'],['members','Clientes'],['teachers','Professores'],['users','Utilizadores']].map(([v,l])=>(
           <button key={v} className={`tab-btn ${tab===v?'active':''}`} onClick={()=>handleTab(v)}>{l}</button>
         ))}
       </div>
@@ -435,36 +421,6 @@ export default function Admin({ members, teachers, classes, reload }) {
               <button disabled={isBusy(`del-t-${t.id}`)} className="del-btn" onClick={()=>run(`del-t-${t.id}`,async()=>{await deleteTeacher(t.id);await reload();})}>{isBusy(`del-t-${t.id}`)?'…':'REMOVER'}</button>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* ── CHECK-INS ───────────────────────────────── */}
-      {tab==='checkins' && (
-        <div>
-          <div className="sec-title" style={{marginBottom:16}}>
-            <span>CHECK-INS DE HOJE</span>
-            <span style={{fontFamily:'monospace',fontSize:10,fontWeight:400}}>{new Date().toLocaleDateString('pt-PT',{weekday:'long',day:'numeric',month:'long'}).toUpperCase()}</span>
-          </div>
-          {checkins.length===0
-            ? <div className="card" style={{textAlign:'center',padding:24,fontFamily:'monospace',fontSize:12,color:'var(--muted)'}}>Sem check-ins hoje.</div>
-            : Object.entries(checkins.reduce((acc,ci)=>{
-                if(!acc[ci.class_id])acc[ci.class_id]={name:ci.class_name,items:[]};
-                acc[ci.class_id].items.push(ci); return acc;
-              },{})).map(([classId,{name,items}])=>{
-                const cls=classes.find(c=>c.id===classId); const color=cls?.color||'#85a800';
-                return(
-                  <div key={classId} className="card" style={{borderLeft:`3px solid ${color}`,marginBottom:12}}>
-                    <div style={{fontWeight:900,fontSize:16,marginBottom:12,letterSpacing:1}}>{name.toUpperCase()}</div>
-                    {items.map(ci=>(
-                      <div key={ci.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',background:'var(--green-bg)',border:'1px solid var(--green-b)',borderRadius:8,marginBottom:6}}>
-                        <span style={{fontWeight:700,fontSize:16,color:'var(--green)'}}>✓ {ci.member_name}</span>
-                        <button disabled={isBusy(`ci-${classId}-${ci.member_id}`)} className="del-btn" onClick={()=>cancelCheckin(classId,ci.member_id)}>{isBusy(`ci-${classId}-${ci.member_id}`)?'…':'✕ REMOVER'}</button>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })
-          }
         </div>
       )}
 
