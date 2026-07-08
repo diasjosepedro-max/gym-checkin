@@ -140,18 +140,22 @@ export default function Schedule({ members, teachers, classes, reload }) {
     if (!selMid || !modal) return;
     await run('checkin', async () => {
       await createCheckin({ class_id: modal.id, member_id: selMid, date: today });
-      await reload(); setSelMid(null);
-      const updated = effectiveClasses.find(c => c.id === modal.id);
-      if (updated) setModal(updated);
+      const member = members.find(m => m.id === selMid);
+      setModal(prev => ({
+        ...prev,
+        checkedIn: [...(prev.checkedIn || []), { member_id: selMid, member_name: member?.name, date: today }],
+      }));
+      setSelMid(null);
     });
   }
 
   async function doCancelCheckIn(classId, memberId) {
     await run(`cc-${classId}-${memberId}`, async () => {
       await deleteCheckin({ class_id: classId, member_id: memberId, date: today });
-      await reload();
-      const updated = effectiveClasses.find(c => c.id === classId);
-      if (updated) setModal(updated);
+      setModal(prev => ({
+        ...prev,
+        checkedIn: (prev.checkedIn || []).filter(ci => ci.member_id !== memberId),
+      }));
     });
   }
 

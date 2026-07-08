@@ -31,8 +31,16 @@ export default function Payments({ members }) {
 
   async function toggle(memberId, paid) {
     await run(`t${memberId}`, async () => {
-      await setPayment({ member_id: memberId, month: monthKey, paid });
-      await load();
+      setPayments(prev => {
+        const exists = prev.find(p => p.member_id === memberId);
+        if (exists) return prev.map(p => p.member_id === memberId ? { ...p, paid } : p);
+        return [...prev, { member_id: memberId, month: monthKey, paid }];
+      });
+      try {
+        await setPayment({ member_id: memberId, month: monthKey, paid });
+      } catch {
+        await load();
+      }
     });
   }
 
