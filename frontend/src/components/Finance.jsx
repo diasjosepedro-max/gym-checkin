@@ -9,7 +9,7 @@ const getTag = t => TAG[t] || {bg:'var(--card2)',c:'var(--muted)'};
 
 export default function Finance() {
   const [view, setView]       = useState('month');
-  const [month, setMonth]     = useState('Jun');
+  const [month, setMonth]     = useState(MONTHS[new Date().getMonth()]);
   const [tab, setTab]         = useState('clients');
   const [filter, setFilter]   = useState('all');
 
@@ -38,7 +38,7 @@ export default function Finance() {
   // Sessões
   const [newSession, setNewSession] = useState({ teacher_id:'', session_date:'', notes:'' });
 
-  const year = 2026;
+  const year = new Date().getFullYear();
 
   useEffect(() => { loadAll(); }, [month]);
   useEffect(() => { if(view==='annual') loadAnnual(); }, [view]);
