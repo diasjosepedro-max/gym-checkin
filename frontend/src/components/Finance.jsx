@@ -674,6 +674,29 @@ export default function Finance() {
                 </div>
               </div>
             ))}
+
+            {withVal.filter(c=>c.has_invoice).length > 0 && (
+              <div style={{marginBottom:16}}>
+                <div className="admin-day-title">IVA POR FATURA (23%)</div>
+                <div style={{border:'1px solid var(--border)',borderRadius:10,overflow:'hidden'}}>
+                  {withVal.filter(c=>c.has_invoice).map(c=>(
+                    <div key={c.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderBottom:'1px solid var(--border)',fontSize:12}}>
+                      <span style={{color:'var(--muted)'}}>{c.name}</span>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontFamily:'monospace',fontSize:11,color:'var(--muted)'}}>
+                          {fmt(getValue(c.id))} × 23%
+                        </span>
+                        <span style={{fontWeight:600,color:'var(--red)'}}>{fmt(getValue(c.id)*0.23)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{display:'flex',justifyContent:'space-between',padding:'10px 14px',background:'var(--card2)',fontWeight:600,fontSize:12}}>
+                    <span style={{color:'var(--muted)'}}>Total IVA</span>
+                    <span style={{color:'var(--red)'}}>{fmt(ivaTotal)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
