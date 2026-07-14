@@ -29,6 +29,8 @@ export default function Finance() {
   const [editingName, setEditingName] = useState(null); // client id
   const [editNameVal, setEditNameVal] = useState('');
 
+  const [showInactive, setShowInactive] = useState(false);
+
   // Novo cliente
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClient, setNewClient] = useState({ name:'', type:'PT', sessions:'1x', standard_value:'', value_to_professor:'', professor_id:'', has_pack:false, has_insurance:false, has_invoice:false });
@@ -162,9 +164,26 @@ export default function Finance() {
 
   // Novo cliente financeiro
   async function deactivateClient(c) {
-    if (!confirm(`Remover "${c.name}"?\nOs dados dos meses anteriores são mantidos.`)) return;
+    if (!confirm(`Desativar "${c.name}"?\nO cliente não será copiado para o mês seguinte. Pode ser reativado a qualquer momento.`)) return;
     try {
-      await api.delete(`/finance/clients/${c.id}`);
+      await api.put(`/finance/clients/${c.id}`, {
+        name: c.name, type: c.type, sessions: c.sessions, active: false,
+        has_pack: c.has_pack, has_insurance: c.has_insurance, has_invoice: c.has_invoice,
+        professor_id: c.professor_id || null, standard_value: c.standard_value,
+        value_to_professor: c.value_to_professor,
+      });
+      await loadAll();
+    } catch(e) { alert('Erro: ' + (e.response?.data?.error || e.message)); }
+  }
+
+  async function reactivateClient(c) {
+    try {
+      await api.put(`/finance/clients/${c.id}`, {
+        name: c.name, type: c.type, sessions: c.sessions, active: true,
+        has_pack: c.has_pack, has_insurance: c.has_insurance, has_invoice: c.has_invoice,
+        professor_id: c.professor_id || null, standard_value: c.standard_value,
+        value_to_professor: c.value_to_professor,
+      });
       await loadAll();
     } catch(e) { alert('Erro: ' + (e.response?.data?.error || e.message)); }
   }
@@ -234,6 +253,7 @@ export default function Finance() {
 
   // Cálculos
   const active     = clients.filter(c=>c.active);
+  const inactive   = clients.filter(c=>!c.active);
   const withVal    = active.filter(c=>getValue(c.id)>0);
   const total      = withVal.reduce((s,c)=>s+getValue(c.id),0);
   const received   = withVal.filter(c=>isPaid(c.id)).reduce((s,c)=>s+getValue(c.id),0);
@@ -519,7 +539,7 @@ export default function Finance() {
                             <button onClick={()=>toggle(c)} style={{fontSize:11,fontWeight:500,padding:'5px 11px',borderRadius:6,cursor:'pointer',background:p?'var(--red-bg)':'var(--green-bg)',border:p?'1px solid var(--red-b)':'1px solid var(--green-b)',color:p?'var(--red)':'var(--green)'}}>
                               {p?'✕ Desfazer':'✓ Pago'}
                             </button>
-                            <button onClick={()=>deactivateClient(c)} title="Remover cliente" style={{fontSize:11,padding:'5px 8px',borderRadius:6,cursor:'pointer',background:'none',border:'1px solid var(--border)',color:'var(--muted)'}}>✕</button>
+                            <button onClick={()=>deactivateClient(c)} title="Desativar cliente" style={{fontSize:11,padding:'5px 8px',borderRadius:6,cursor:'pointer',background:'none',border:'1px solid var(--border)',color:'var(--muted)'}}>Desativar</button>
                           </div>
                         </td>
                       </tr>
@@ -578,6 +598,37 @@ export default function Finance() {
               </tbody>
             </table>
           </div>
+
+          {inactive.length > 0 && (
+            <div style={{marginTop:16}}>
+              <button
+                onClick={()=>setShowInactive(v=>!v)}
+                style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:12,fontFamily:'monospace',padding:'4px 0',display:'flex',alignItems:'center',gap:6}}
+              >
+                {showInactive ? '▾' : '▸'} INATIVOS ({inactive.length})
+              </button>
+              {showInactive && (
+                <div style={{border:'1px solid var(--border)',borderRadius:10,overflow:'hidden',marginTop:8}}>
+                  <table style={{width:'100%',borderCollapse:'collapse'}}>
+                    <tbody>
+                      {inactive.map(c=>(
+                        <tr key={c.id} style={{borderBottom:'1px solid var(--border)',opacity:0.6}}>
+                          <td style={{padding:'10px 12px',fontSize:13,fontWeight:600,textDecoration:'line-through',color:'var(--muted)'}}>{c.name}</td>
+                          <td style={{padding:'10px 12px',fontSize:11,color:'var(--muted)'}}>{c.type} · {c.sessions}</td>
+                          <td style={{padding:'10px 12px',textAlign:'right'}}>
+                            <button
+                              onClick={()=>reactivateClient(c)}
+                              style={{fontSize:11,padding:'5px 11px',borderRadius:6,cursor:'pointer',background:'var(--accent-bg)',border:'1px solid var(--accent)',color:'var(--accent)',fontWeight:600}}
+                            >Reativar</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </>)}
 
         {/* ── DESPESAS ──────────────────────────────── */}
