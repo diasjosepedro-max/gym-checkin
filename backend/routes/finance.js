@@ -4,6 +4,18 @@ const auth   = require('../middleware/auth');
 
 db.query(`ALTER TABLE financial_clients ADD COLUMN IF NOT EXISTS has_invoice BOOLEAN DEFAULT false`).catch(() => {});
 
+db.query(`
+  CREATE TABLE IF NOT EXISTS teacher_month_totals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+    month VARCHAR(3) NOT NULL,
+    year INTEGER NOT NULL,
+    session_count INTEGER NOT NULL DEFAULT 0,
+    is_expense BOOLEAN NOT NULL DEFAULT false,
+    UNIQUE(teacher_id, month, year)
+  )
+`).catch(() => {});
+
 // ── CLIENTES ──────────────────────────────────────────────────────────
 router.get('/clients', auth, async (req, res) => {
   try {
@@ -51,17 +63,10 @@ router.put('/clients/:id', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/clients/:id', auth, async (req, res) => {
-  try {
-    await db.query('UPDATE financial_clients SET active=false WHERE id=$1', [req.params.id]);
-    res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
 // ── VALORES MENSAIS ───────────────────────────────────────────────────
 router.get('/values', auth, async (req, res) => {
   try {
-    const { month, year=2026 } = req.query;
+    const { month, year=new Date().getFullYear() } = req.query;
     const q = month
       ? `SELECT fv.*,fc.name,fc.type,fc.sessions,fc.has_pack,fc.standard_value,fc.value_to_professor,fc.professor_id,t.name AS professor_name
          FROM financial_values fv
@@ -79,7 +84,7 @@ router.get('/values', auth, async (req, res) => {
 
 router.post('/values', auth, async (req, res) => {
   try {
-    const { client_id, month, year=2026, value, professor_value, monthly_professor_id, monthly_has_pack, is_new_standard } = req.body;
+    const { client_id, month, year=new Date().getFullYear(), value, professor_value, monthly_professor_id, monthly_has_pack, is_new_standard } = req.body;
 
     const { rows } = await db.query(`
       INSERT INTO financial_values (client_id,month,year,value,professor_value,monthly_professor_id,monthly_has_pack,is_new_standard)
@@ -106,7 +111,7 @@ router.post('/values', auth, async (req, res) => {
 // Copiar valores do mês anterior (ou do standard) para um mês
 router.post('/values/copy-month', auth, async (req, res) => {
   try {
-    const { month, year=2026 } = req.body;
+    const { month, year=new Date().getFullYear() } = req.body;
     const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
     const mIdx = MONTHS.indexOf(month);
     const prevMonth = mIdx > 0 ? MONTHS[mIdx-1] : null;
@@ -155,7 +160,7 @@ router.post('/values/copy-month', auth, async (req, res) => {
 // ── PAGAMENTOS ────────────────────────────────────────────────────────
 router.get('/payments', auth, async (req, res) => {
   try {
-    const { month, year=2026 } = req.query;
+    const { month, year=new Date().getFullYear() } = req.query;
     const q = month
       ? 'SELECT fp.*,fc.name,fc.type FROM financial_payments fp JOIN financial_clients fc ON fp.client_id=fc.id WHERE fp.month=$1 AND fp.year=$2'
       : 'SELECT fp.*,fc.name,fc.type FROM financial_payments fp JOIN financial_clients fc ON fp.client_id=fc.id WHERE fp.year=$1';
@@ -166,7 +171,7 @@ router.get('/payments', auth, async (req, res) => {
 
 router.post('/payments', auth, async (req, res) => {
   try {
-    const { client_id, month, year=2026, paid, payment_date } = req.body;
+    const { client_id, month, year=new Date().getFullYear(), paid, payment_date } = req.body;
     const { rows } = await db.query(`
       INSERT INTO financial_payments (client_id,month,year,paid,payment_date)
       VALUES ($1,$2,$3,$4,$5)
@@ -180,7 +185,7 @@ router.post('/payments', auth, async (req, res) => {
 
 router.delete('/payments/reset', auth, async (req, res) => {
   try {
-    const { month, year=2026 } = req.body;
+    const { month, year=new Date().getFullYear() } = req.body;
     await db.query('DELETE FROM financial_payments WHERE month=$1 AND year=$2', [month, year]);
     res.json({ success: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -189,7 +194,7 @@ router.delete('/payments/reset', auth, async (req, res) => {
 // ── CUSTOS FIXOS ──────────────────────────────────────────────────────
 router.get('/costs', auth, async (req, res) => {
   try {
-    const { month, year=2026 } = req.query;
+    const { month, year=new Date().getFullYear() } = req.query;
     const q = month
       ? 'SELECT * FROM financial_costs WHERE month=$1 AND year=$2 ORDER BY type,label'
       : 'SELECT * FROM financial_costs WHERE year=$1 ORDER BY month,type,label';
@@ -200,7 +205,7 @@ router.get('/costs', auth, async (req, res) => {
 
 router.post('/costs', auth, async (req, res) => {
   try {
-    const { month, year=2026, label, value, type='regular', expense_date } = req.body;
+    const { month, year=new Date().getFullYear(), label, value, type='regular', expense_date } = req.body;
     const { rows } = await db.query(`
       INSERT INTO financial_costs (month,year,label,value,type,expense_date)
       VALUES ($1,$2,$3,$4,$5,$6)
@@ -243,7 +248,7 @@ router.delete('/teachers/:id', auth, async (req, res) => {
 
 router.get('/teacher-costs', auth, async (req, res) => {
   try {
-    const { month, year=2026 } = req.query;
+    const { month, year=new Date().getFullYear() } = req.query;
     const q = month
       ? 'SELECT ftc.*,t.name FROM financial_teacher_costs ftc JOIN teachers t ON ftc.teacher_id=t.id WHERE ftc.month=$1 AND ftc.year=$2'
       : 'SELECT ftc.*,t.name FROM financial_teacher_costs ftc JOIN teachers t ON ftc.teacher_id=t.id WHERE ftc.year=$1';
@@ -254,7 +259,7 @@ router.get('/teacher-costs', auth, async (req, res) => {
 
 router.post('/teacher-costs', auth, async (req, res) => {
   try {
-    const { teacher_id, month, year=2026, value } = req.body;
+    const { teacher_id, month, year=new Date().getFullYear(), value } = req.body;
     const { rows } = await db.query(`
       INSERT INTO financial_teacher_costs (teacher_id,month,year,value)
       VALUES ($1,$2,$3,$4)
@@ -273,10 +278,37 @@ router.put('/teachers/:id/session-value', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── TOTAIS MENSAIS DE PROFESSORES ─────────────────────────────────────
+router.get('/teacher-month-totals', auth, async (req, res) => {
+  try {
+    const { month, year } = req.query;
+    const { rows } = await db.query(
+      'SELECT * FROM teacher_month_totals WHERE month=$1 AND year=$2',
+      [month, year]
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/teacher-month-totals', auth, async (req, res) => {
+  try {
+    const { teacher_id, month, year, session_count, is_expense } = req.body;
+    const { rows } = await db.query(`
+      INSERT INTO teacher_month_totals (teacher_id, month, year, session_count, is_expense)
+      VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (teacher_id, month, year)
+      DO UPDATE SET session_count=$4, is_expense=$5
+      RETURNING *`,
+      [teacher_id, month, year, Number(session_count)||0, is_expense||false]
+    );
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── SESSÕES DE PROFESSORES ────────────────────────────────────────────
 router.get('/teacher-sessions', auth, async (req, res) => {
   try {
-    const { teacher_id, month, year=2026 } = req.query;
+    const { teacher_id, month, year=new Date().getFullYear() } = req.query;
     const { rows } = await db.query(`
       SELECT fts.*,ft.name,ft.value_per_session FROM financial_teacher_sessions fts
       JOIN teachers ft ON fts.teacher_id=ft.id
@@ -289,7 +321,7 @@ router.get('/teacher-sessions', auth, async (req, res) => {
 
 router.get('/teacher-sessions/month', auth, async (req, res) => {
   try {
-    const { month, year=2026 } = req.query;
+    const { month, year=new Date().getFullYear() } = req.query;
     const { rows } = await db.query(`
       SELECT fts.*,ft.name,ft.value_per_session FROM financial_teacher_sessions fts
       JOIN teachers ft ON fts.teacher_id=ft.id
@@ -302,7 +334,7 @@ router.get('/teacher-sessions/month', auth, async (req, res) => {
 
 router.post('/teacher-sessions', auth, async (req, res) => {
   try {
-    const { teacher_id, session_date, month, year=2026, notes } = req.body;
+    const { teacher_id, session_date, month, year=new Date().getFullYear(), notes } = req.body;
     const { rows } = await db.query(`
       INSERT INTO financial_teacher_sessions (teacher_id,session_date,month,year,notes)
       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
@@ -322,7 +354,7 @@ router.delete('/teacher-sessions/:id', auth, async (req, res) => {
 // ── RESUMO ANUAL ──────────────────────────────────────────────────────
 router.get('/annual', auth, async (req, res) => {
   try {
-    const { year=2026 } = req.query;
+    const { year=new Date().getFullYear() } = req.query;
     const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
     const [values, payments, costs, tCosts] = await Promise.all([
       db.query('SELECT * FROM financial_values WHERE year=$1', [year]),

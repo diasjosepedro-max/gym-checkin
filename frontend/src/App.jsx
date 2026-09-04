@@ -75,7 +75,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        <div class="header-inner">
+        <div className="header-inner">
           <div className="logo">
             <img src="/IMG-20251118-WA0009.jpg" alt="Habitus" className="logo-img" />
             <div className="logo-text-wrap">

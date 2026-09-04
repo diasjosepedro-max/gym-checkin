@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import * as XLSX from 'xlsx';
 import api from '../api';
 
@@ -18,7 +18,6 @@ export default function Finance() {
   const [payments, setPayments] = useState([]);
   const [costs, setCosts]       = useState([]);
   const [teachers, setTeachers] = useState([]);
-  const [tSessions, setTSessions] = useState([]);
   const [annualData, setAnnualData] = useState([]);
   const [loading, setLoading]   = useState(true);
 
@@ -38,7 +37,8 @@ export default function Finance() {
   // Despesas
   const [newCost, setNewCost] = useState({ label:'', value:'', type:'regular', expense_date:'' });
   // Sessões
-  const [newSession, setNewSession] = useState({ teacher_id:'', session_date:'', notes:'' });
+  const [tMonthTotals, setTMonthTotals] = useState([]);
+  const [localSessions, setLocalSessions] = useState({});
 
   const year = new Date().getFullYear();
 
@@ -47,20 +47,24 @@ export default function Finance() {
 
   async function loadAll() {
     setLoading(true);
-    const [c,v,p,fc,t,ts] = await Promise.allSettled([
+    const [c,v,p,fc,t,tm] = await Promise.allSettled([
       api.get('/finance/clients'),
       api.get(`/finance/values?month=${month}&year=${year}`),
       api.get(`/finance/payments?month=${month}&year=${year}`),
       api.get(`/finance/costs?month=${month}&year=${year}`),
       api.get('/finance/teachers'),
-      api.get(`/finance/teacher-sessions/month?month=${month}&year=${year}`),
+      api.get(`/finance/teacher-month-totals?month=${month}&year=${year}`),
     ]);
     if (c.status==='fulfilled') setClients(c.value.data);
     if (v.status==='fulfilled') setValues(v.value.data);
     if (p.status==='fulfilled') setPayments(p.value.data);
     if (fc.status==='fulfilled') setCosts(fc.value.data);
     if (t.status==='fulfilled') setTeachers(t.value.data);
-    if (ts.status==='fulfilled') setTSessions(ts.value.data);
+    if (tm.status==='fulfilled') {
+      const tmData = tm.value.data;
+      setTMonthTotals(Array.isArray(tmData) ? tmData : (tmData ? Object.values(tmData) : []));
+      setLocalSessions({});
+    }
     setLoading(false);
   }
 
@@ -75,39 +79,46 @@ export default function Finance() {
   const getHabValue  = cid => getValue(cid) - getProfValue(cid);
   const isPaid       = cid => payments.find(p=>p.client_id===cid)?.paid===true;
   const getDate      = cid => payments.find(p=>p.client_id===cid)?.payment_date||'';
-  const getSessions  = tid => tSessions.filter(s=>s.teacher_id===tid);
+  const getMonthTotal = tid => tMonthTotals.find(t => t.teacher_id === tid) || { session_count: 0, is_expense: false };
   const getClientProfTotal = tid => withVal
     .filter(c => (getVal(c.id)?.monthly_professor_id || c.professor_id) === tid)
     .reduce((s,c) => s + getProfValue(c.id), 0);
 
-  // Toggle pagamento
+  // Helper: constrói payload para PUT /finance/clients/:id
+  const clientPayload = (c, overrides = {}) => ({
+    name: c.name, type: c.type, sessions: c.sessions, active: c.active,
+    has_pack: c.has_pack, has_insurance: c.has_insurance, has_invoice: c.has_invoice,
+    professor_id: c.professor_id || null, standard_value: c.standard_value,
+    value_to_professor: c.value_to_professor,
+    ...overrides,
+  });
+  const updateClient = (c, overrides) => api.put(`/finance/clients/${c.id}`, clientPayload(c, overrides));
+
+  // Toggle pagamento (optimistic)
   async function toggle(client) {
     const was = isPaid(client.id);
     const date = was ? '' : new Date().toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit',year:'numeric'});
-    await api.post('/finance/payments',{client_id:client.id,month,year,paid:!was,payment_date:date});
-    await loadAll();
+    setPayments(prev => {
+      const exists = prev.find(p => p.client_id === client.id);
+      if (exists) return prev.map(p => p.client_id === client.id ? {...p, paid: !was, payment_date: date} : p);
+      return [...prev, { client_id: client.id, paid: !was, payment_date: date }];
+    });
+    try {
+      await api.post('/finance/payments',{client_id:client.id,month,year,paid:!was,payment_date:date});
+      await loadAll();
+    } catch(e) { await loadAll(); }
   }
 
   async function saveClientName(c) {
     if (!editNameVal.trim() || editNameVal.trim() === c.name) { setEditingName(null); return; }
-    await api.put(`/finance/clients/${c.id}`, {
-      name: editNameVal.trim(), type: c.type, sessions: c.sessions, active: c.active,
-      has_pack: c.has_pack, has_insurance: c.has_insurance, has_invoice: c.has_invoice,
-      professor_id: c.professor_id || null, standard_value: c.standard_value,
-      value_to_professor: c.value_to_professor,
-    });
+    await updateClient(c, { name: editNameVal.trim() });
     setEditingName(null);
     await loadAll();
   }
 
   // Toggle fatura (has_invoice)
   async function toggleInvoice(c) {
-    await api.put(`/finance/clients/${c.id}`, {
-      name: c.name, type: c.type, sessions: c.sessions, active: c.active,
-      has_pack: c.has_pack, has_insurance: c.has_insurance, has_invoice: !c.has_invoice,
-      professor_id: c.professor_id || null, standard_value: c.standard_value,
-      value_to_professor: c.value_to_professor,
-    });
+    await updateClient(c, { has_invoice: !c.has_invoice });
     await loadAll();
   }
 
@@ -122,16 +133,8 @@ export default function Finance() {
       monthly_has_pack: f.monthly_has_pack,
       is_new_standard: f.is_new_standard||false,
     });
-    // Atualiza has_invoice no registo do cliente
     const client = active.find(c => c.id === cid);
-    if (client) {
-      await api.put(`/finance/clients/${cid}`, {
-        name: client.name, type: client.type, sessions: client.sessions, active: client.active,
-        has_pack: client.has_pack, has_insurance: client.has_insurance, has_invoice: f.has_invoice || false,
-        professor_id: client.professor_id || null, standard_value: client.standard_value,
-        value_to_professor: client.value_to_professor,
-      });
-    }
+    if (client) await updateClient(client, { has_invoice: f.has_invoice || false });
     setEditVal(null); setEditForm({});
     await loadAll();
   }
@@ -165,27 +168,13 @@ export default function Finance() {
   // Novo cliente financeiro
   async function deactivateClient(c) {
     if (!confirm(`Desativar "${c.name}"?\nO cliente não será copiado para o mês seguinte. Pode ser reativado a qualquer momento.`)) return;
-    try {
-      await api.put(`/finance/clients/${c.id}`, {
-        name: c.name, type: c.type, sessions: c.sessions, active: false,
-        has_pack: c.has_pack, has_insurance: c.has_insurance, has_invoice: c.has_invoice,
-        professor_id: c.professor_id || null, standard_value: c.standard_value,
-        value_to_professor: c.value_to_professor,
-      });
-      await loadAll();
-    } catch(e) { alert('Erro: ' + (e.response?.data?.error || e.message)); }
+    try { await updateClient(c, { active: false }); await loadAll(); }
+    catch(e) { alert('Erro: ' + (e.response?.data?.error || e.message)); }
   }
 
   async function reactivateClient(c) {
-    try {
-      await api.put(`/finance/clients/${c.id}`, {
-        name: c.name, type: c.type, sessions: c.sessions, active: true,
-        has_pack: c.has_pack, has_insurance: c.has_insurance, has_invoice: c.has_invoice,
-        professor_id: c.professor_id || null, standard_value: c.standard_value,
-        value_to_professor: c.value_to_professor,
-      });
-      await loadAll();
-    } catch(e) { alert('Erro: ' + (e.response?.data?.error || e.message)); }
+    try { await updateClient(c, { active: true }); await loadAll(); }
+    catch(e) { alert('Erro: ' + (e.response?.data?.error || e.message)); }
   }
 
   async function addClient() {
@@ -226,12 +215,19 @@ export default function Finance() {
     await loadAll();
   }
 
-  // Sessões
-  async function addSession() {
-    if (!newSession.teacher_id||!newSession.session_date) return;
-    await api.post('/finance/teacher-sessions',{...newSession,month,year});
-    setNewSession({teacher_id:'',session_date:'',notes:''});
-    await loadAll();
+  async function saveMonthTotal(teacher_id, session_count, is_expense) {
+    setTMonthTotals(prev => {
+      const exists = prev.find(t => t.teacher_id === teacher_id);
+      if (exists) return prev.map(t => t.teacher_id === teacher_id ? {...t, session_count, is_expense} : t);
+      return [...prev, { teacher_id, session_count, is_expense }];
+    });
+    try {
+      await api.post('/finance/teacher-month-totals', { teacher_id, month, year, session_count, is_expense });
+      await loadAll();
+    } catch(e) {
+      await loadAll();
+      alert('Erro ao guardar: ' + (e.response?.data?.error || e.message));
+    }
   }
   async function saveSessionValue(tid,val) {
     await api.put(`/finance/teachers/${tid}/session-value`,{value_per_session:Number(val)});
@@ -262,13 +258,14 @@ export default function Finance() {
   const sporadicCosts = costs.filter(c=>c.type==='sporadic');
   const fcTotal    = costs.reduce((s,c)=>s+Number(c.value),0);
   // Custo dos professores = sessões × valor/sessão
-  const tcTotal    = teachers.reduce((s,t)=>s+getSessions(t.id).length*Number(t.value_per_session||0),0);
+  const tcTotal    = teachers.reduce((s,t)=>{ const mt=getMonthTotal(t.id); return s+(mt.is_expense?mt.session_count*Number(t.value_per_session||0):0); },0);
   // + valor prof por cliente (se definido)
+  const withInvoice    = withVal.filter(c=>c.has_invoice);
   const clientProfTotal = withVal.reduce((s,c)=>s+getProfValue(c.id),0);
-  const ivaTotal   = withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getValue(c.id)*0.23,0);
-  const totalCosts = fcTotal + tcTotal;
-  const profit     = received - totalCosts - clientProfTotal - ivaTotal;
-  const projected  = total - totalCosts - withVal.reduce((s,c)=>s+getProfValue(c.id),0) - withVal.filter(c=>c.has_invoice).reduce((s,c)=>s+getValue(c.id)*0.23,0);
+  const ivaTotal       = withInvoice.reduce((s,c)=>s+getValue(c.id)*0.23,0);
+  const totalCosts     = fcTotal + tcTotal;
+  const profit         = received - totalCosts - clientProfTotal - ivaTotal;
+  const projected      = total - totalCosts - clientProfTotal - ivaTotal;
 
   let tableClients = active;
   if (filter==='paid')   tableClients = tableClients.filter(c=>isPaid(c.id));
@@ -359,14 +356,14 @@ export default function Finance() {
           <div style={s.panel}>
             <div style={s.pHdr}>Professores</div>
             {teachers.map(t=>{
-              const sess=getSessions(t.id); const vps=Number(t.value_per_session||0);
-              const sessTotal=sess.length*vps; const cliTotal=getClientProfTotal(t.id);
+              const mt=getMonthTotal(t.id); const vps=Number(t.value_per_session||0);
+              const sessTotal=mt.is_expense?mt.session_count*vps:0; const cliTotal=getClientProfTotal(t.id);
               return(
                 <div key={t.id} style={s.crow}>
                   <span style={{color:'var(--muted)'}}>{t.name}</span>
                   <div style={{textAlign:'right'}}>
                     {cliTotal>0&&<div style={{fontSize:10,color:'var(--muted)'}}>clientes {fmt(cliTotal)}</div>}
-                    {sessTotal>0&&<div style={{fontSize:10,color:'var(--muted)'}}>sessões {fmt(sessTotal)}</div>}
+                    {sessTotal>0&&<div style={{fontSize:10,color:'var(--muted)'}}>{mt.session_count} sess. {fmt(sessTotal)}</div>}
                     <b>{fmt(sessTotal+cliTotal)}</b>
                   </div>
                 </div>
@@ -500,7 +497,7 @@ export default function Finance() {
                   : tableClients.map(c=>{
                     const p=isPaid(c.id); const tag=getTag(c.type);
                     const isEditing=editVal===c.id;
-                    return(<>
+                    return(<Fragment key={c.id}>
                       <tr key={c.id} style={{opacity:p?0.55:1,borderBottom:isEditing?'none':'1px solid var(--border)'}}>
                         <td style={{padding:'10px 12px',fontSize:12}}>
                           <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
@@ -592,7 +589,7 @@ export default function Finance() {
                           </td>
                         </tr>
                       )}
-                    </>);
+                    </Fragment>);
                   })
                 }
               </tbody>
@@ -675,11 +672,11 @@ export default function Finance() {
               </div>
             ))}
 
-            {withVal.filter(c=>c.has_invoice).length > 0 && (
+            {withInvoice.length > 0 && (
               <div style={{marginBottom:16}}>
                 <div className="admin-day-title">IVA POR FATURA (23%)</div>
                 <div style={{border:'1px solid var(--border)',borderRadius:10,overflow:'hidden'}}>
-                  {withVal.filter(c=>c.has_invoice).map(c=>(
+                  {withInvoice.map(c=>(
                     <div key={c.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderBottom:'1px solid var(--border)',fontSize:12}}>
                       <span style={{color:'var(--muted)'}}>{c.name}</span>
                       <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -703,38 +700,23 @@ export default function Finance() {
         {/* ── PROFESSORES ───────────────────────────── */}
         {tab==='teachers' && (
           <div>
-            <div className="card" style={{marginBottom:16}}>
-              <div className="card-title">REGISTAR SESSÃO</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 160px 1fr',gap:10,marginBottom:10}}>
-                <select className="input" value={newSession.teacher_id} onChange={e=>setNewSession(f=>({...f,teacher_id:e.target.value}))}>
-                  <option value="">— Professor —</option>
-                  {teachers.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-                <input className="input" type="date" value={newSession.session_date} onChange={e=>setNewSession(f=>({...f,session_date:e.target.value}))}/>
-                <input className="input" placeholder="Notas (opcional)" value={newSession.notes} onChange={e=>setNewSession(f=>({...f,notes:e.target.value}))}/>
-              </div>
-              <button className="green-btn" onClick={addSession}>ADICIONAR SESSÃO</button>
-            </div>
-
             {teachers.map(t=>{
-              const sess=getSessions(t.id); const vps=Number(t.value_per_session||0);
-              const sessTotal=sess.length*vps; const cliTotal=getClientProfTotal(t.id);
-              const tClients=withVal.filter(c=>(getVal(c.id)?.monthly_professor_id||c.professor_id)===t.id);
+              const mt = getMonthTotal(t.id);
+              const vps = Number(t.value_per_session||0);
+              const localCount = localSessions[t.id] !== undefined ? localSessions[t.id] : mt.session_count;
+              const sessTotal = localCount * vps;
+              const cliTotal = getClientProfTotal(t.id);
+              const tClients = withVal.filter(c=>(getVal(c.id)?.monthly_professor_id||c.professor_id)===t.id);
               return(
-                <div key={t.id} className="cls-row" style={{borderLeft:'3px solid var(--accent)',marginBottom:12}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
+                <div key={t.id} className="cls-row" style={{borderLeft:`3px solid ${mt.is_expense?'var(--red)':'var(--accent)'}`,marginBottom:12}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:8}}>
                     <span style={{fontWeight:900,fontSize:16,letterSpacing:1}}>{t.name.toUpperCase()}</span>
-                    <div style={{display:'flex',alignItems:'center',gap:12}}>
-                      <span style={{fontFamily:'monospace',fontSize:12,color:'var(--muted)'}}>
-                        Total a receber:
-                      </span>
-                      <span style={{fontFamily:'monospace',fontSize:16,color:'var(--accent)',fontWeight:700}}>{fmt(sessTotal+cliTotal)}</span>
-                    </div>
+                    <span style={{fontFamily:'monospace',fontSize:16,color:'var(--accent)',fontWeight:700}}>{fmt(sessTotal+cliTotal)}</span>
                   </div>
 
                   {/* Clientes deste professor */}
                   {tClients.length>0&&(
-                    <div style={{marginBottom:10}}>
+                    <div style={{marginBottom:12}}>
                       <div style={{fontSize:10,color:'var(--muted)',letterSpacing:1.5,textTransform:'uppercase',marginBottom:6}}>Clientes</div>
                       <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
                         {tClients.map(c=>(
@@ -747,31 +729,39 @@ export default function Finance() {
                     </div>
                   )}
 
-                  {/* Sessões */}
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                    <span style={{fontFamily:'monospace',fontSize:11,color:'var(--muted)'}}>Sessões — valor/sessão:</span>
-                    {editSessVal[t.id]!==undefined
-                      ? <div style={{display:'flex',gap:4}}>
-                          <input type="number" defaultValue={vps} autoFocus style={{width:70,padding:'3px 6px',borderRadius:6,border:'1px solid var(--accent)',fontFamily:'monospace',fontSize:12}}
-                            onKeyDown={e=>{if(e.key==='Enter')saveSessionValue(t.id,e.target.value);if(e.key==='Escape')setEditSessVal({});}}/>
-                          <button onClick={e=>saveSessionValue(t.id,e.target.previousSibling?.value||vps)} style={{background:'var(--green-bg)',border:'1px solid var(--green-b)',color:'var(--green)',borderRadius:5,padding:'2px 7px',fontSize:11,cursor:'pointer'}}>✓</button>
-                        </div>
-                      : <span onClick={()=>setEditSessVal({[t.id]:vps})} style={{cursor:'pointer',fontWeight:600,borderBottom:'1px dashed var(--muted)',fontFamily:'monospace',fontSize:12}}>{fmt(vps)}</span>
-                    }
-                    <span style={{fontFamily:'monospace',fontSize:12,color:'var(--muted)'}}>{sess.length} sessões = <b style={{color:'var(--accent)'}}>{fmt(sessTotal)}</b></span>
-                  </div>
-                  {sess.length===0
-                    ? <div style={{fontFamily:'monospace',fontSize:11,color:'var(--muted)'}}>Sem sessões registadas.</div>
-                    : <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                        {sess.map(s=>(
-                          <div key={s.id} style={{display:'inline-flex',alignItems:'center',gap:6,background:'var(--card2)',border:'1px solid var(--border)',borderRadius:8,padding:'4px 10px',fontSize:11}}>
-                            <span style={{fontFamily:'monospace'}}>{new Date(s.session_date).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit'})}</span>
-                            {s.notes&&<span style={{color:'var(--muted)',fontSize:10}}>· {s.notes}</span>}
-                            <button onClick={()=>api.delete(`/finance/teacher-sessions/${s.id}`).then(loadAll)} style={{background:'none',border:'none',color:'var(--red)',cursor:'pointer',fontSize:12,padding:'0 2px'}}>✕</button>
+                  {/* Sessões mensais */}
+                  <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <input
+                        type="number" min="0"
+                        value={localCount}
+                        onChange={e => setLocalSessions(prev=>({...prev,[t.id]:Number(e.target.value)}))}
+                        onBlur={e => saveMonthTotal(t.id, Number(e.target.value), mt.is_expense)}
+                        style={{width:64,padding:'5px 8px',borderRadius:6,border:'1px solid var(--border)',fontFamily:'monospace',fontSize:14,textAlign:'center'}}
+                      />
+                      <span style={{fontFamily:'monospace',fontSize:12,color:'var(--muted)'}}>sessões ×</span>
+                      {editSessVal[t.id]!==undefined
+                        ? <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                            <input type="number" defaultValue={vps} autoFocus style={{width:70,padding:'3px 6px',borderRadius:6,border:'1px solid var(--accent)',fontFamily:'monospace',fontSize:12}}
+                              onKeyDown={e=>{if(e.key==='Enter')saveSessionValue(t.id,e.target.value);if(e.key==='Escape')setEditSessVal({});}}/>
+                            <button onClick={e=>saveSessionValue(t.id,e.target.previousSibling?.value||vps)} style={{background:'var(--green-bg)',border:'1px solid var(--green-b)',color:'var(--green)',borderRadius:5,padding:'2px 7px',fontSize:11,cursor:'pointer'}}>✓</button>
                           </div>
-                        ))}
-                      </div>
-                  }
+                        : <span onClick={()=>setEditSessVal({[t.id]:vps})} style={{cursor:'pointer',fontWeight:600,borderBottom:'1px dashed var(--muted)',fontFamily:'monospace',fontSize:12}}>{fmt(vps)}</span>
+                      }
+                      <span style={{fontFamily:'monospace',fontSize:12,color:'var(--muted)'}}>=</span>
+                      <span style={{fontFamily:'monospace',fontSize:14,fontWeight:700,color:'var(--accent)'}}>{fmt(sessTotal)}</span>
+                    </div>
+                    <label style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer',fontSize:12,padding:'5px 12px',borderRadius:8,border:`1px solid ${mt.is_expense?'var(--red-b)':'var(--border)'}`,background:mt.is_expense?'var(--red-bg)':'var(--card2)'}}>
+                      <input
+                        type="checkbox"
+                        checked={mt.is_expense}
+                        onChange={e => saveMonthTotal(t.id, localCount, e.target.checked)}
+                      />
+                      <span style={{color:mt.is_expense?'var(--red)':'var(--muted)',fontWeight:mt.is_expense?600:400}}>
+                        {mt.is_expense ? `Despesa confirmada · ${fmt(sessTotal)}` : 'Confirmar como despesa'}
+                      </span>
+                    </label>
+                  </div>
                 </div>
               );
             })}
