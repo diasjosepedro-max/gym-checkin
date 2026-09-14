@@ -362,12 +362,15 @@ router.get('/annual', auth, async (req, res) => {
       db.query('SELECT * FROM financial_costs WHERE year=$1', [year]),
       db.query('SELECT * FROM teachers'),
       db.query('SELECT * FROM teacher_month_totals WHERE year=$1', [year]),
-      db.query('SELECT id, has_invoice FROM financial_clients'),
+      db.query('SELECT id, active, has_invoice FROM financial_clients'),
     ]);
     const teacherById = new Map(teachers.rows.map(t => [t.id, t]));
     const clientById  = new Map(clients.rows.map(c => [c.id, c]));
+    // Espelha o filtro "withVal" do resumo mensal: só clientes atualmente ativos
+    // e com valor > 0, para não contar clientes desativados/duplicados nos históricos
+    const activeValues = values.rows.filter(v => clientById.get(v.client_id)?.active && Number(v.value) > 0);
     const result = MONTHS.map(month => {
-      const mVals  = values.rows.filter(v => v.month===month);
+      const mVals  = activeValues.filter(v => v.month===month);
       const mPays  = payments.rows.filter(p => p.month===month);
       const mCosts = costs.rows.filter(c => c.month===month);
       const mMT    = monthTotals.rows.filter(t => t.month===month);
