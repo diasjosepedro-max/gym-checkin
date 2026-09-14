@@ -356,20 +356,37 @@ router.get('/annual', auth, async (req, res) => {
   try {
     const { year=new Date().getFullYear() } = req.query;
     const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-    const [values, payments, costs, tCosts] = await Promise.all([
+    const [values, payments, costs, teachers, monthTotals, clients] = await Promise.all([
       db.query('SELECT * FROM financial_values WHERE year=$1', [year]),
       db.query('SELECT * FROM financial_payments WHERE year=$1', [year]),
       db.query('SELECT * FROM financial_costs WHERE year=$1', [year]),
-      db.query('SELECT * FROM financial_teacher_costs WHERE year=$1', [year]),
+      db.query('SELECT * FROM teachers'),
+      db.query('SELECT * FROM teacher_month_totals WHERE year=$1', [year]),
+      db.query('SELECT id, has_invoice FROM financial_clients'),
     ]);
+    const teacherById = new Map(teachers.rows.map(t => [t.id, t]));
+    const clientById  = new Map(clients.rows.map(c => [c.id, c]));
     const result = MONTHS.map(month => {
       const mVals  = values.rows.filter(v => v.month===month);
       const mPays  = payments.rows.filter(p => p.month===month);
       const mCosts = costs.rows.filter(c => c.month===month);
-      const mTC    = tCosts.rows.filter(t => t.month===month);
+      const mMT    = monthTotals.rows.filter(t => t.month===month);
       const previsto = mVals.reduce((s,v) => s+Number(v.value), 0);
       const recebido = mVals.filter(v => mPays.find(p => p.client_id===v.client_id && p.paid)).reduce((s,v) => s+Number(v.value), 0);
-      const custos   = mCosts.reduce((s,c) => s+Number(c.value), 0) + mTC.reduce((s,t) => s+Number(t.value), 0);
+      // Despesas fixas (regulares + esporádicas)
+      const fixedCosts = mCosts.reduce((s,c) => s+Number(c.value), 0);
+      // Custo dos professores por sessão (sessões × valor/sessão, apenas confirmadas como despesa)
+      const teacherSessionCosts = mMT.reduce((s,t) => {
+        if (!t.is_expense) return s;
+        return s + Number(t.session_count) * Number(teacherById.get(t.teacher_id)?.value_per_session || 0);
+      }, 0);
+      // Valor pago a professores por cliente
+      const professorClientCosts = mVals.reduce((s,v) => s+Number(v.professor_value||0), 0);
+      // IVA (23%) para clientes com fatura
+      const ivaTotal = mVals.reduce((s,v) => {
+        return clientById.get(v.client_id)?.has_invoice ? s + Number(v.value)*0.23 : s;
+      }, 0);
+      const custos = fixedCosts + teacherSessionCosts + professorClientCosts + ivaTotal;
       return { month, previsto, recebido, custos, lucro: recebido-custos };
     });
     res.json(result);
