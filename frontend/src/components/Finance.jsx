@@ -167,8 +167,8 @@ export default function Finance() {
 
   // Novo cliente financeiro
   async function deactivateClient(c) {
-    if (!confirm(`Desativar "${c.name}"?\nO cliente não será copiado para o mês seguinte. Pode ser reativado a qualquer momento.`)) return;
-    try { await updateClient(c, { active: false }); await loadAll(); }
+    if (!confirm(`Desativar "${c.name}"?\nO cliente não será copiado para o mês seguinte. Os meses até ${month} continuam a contar no relatório anual. Pode ser reativado a qualquer momento.`)) return;
+    try { await updateClient(c, { active: false, deactivated_month: month, deactivated_year: year }); await loadAll(); }
     catch(e) { alert('Erro: ' + (e.response?.data?.error || e.message)); }
   }
 

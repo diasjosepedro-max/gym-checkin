@@ -3,6 +3,8 @@ const db     = require('../db');
 const auth   = require('../middleware/auth');
 
 db.query(`ALTER TABLE financial_clients ADD COLUMN IF NOT EXISTS has_invoice BOOLEAN DEFAULT false`).catch(() => {});
+db.query(`ALTER TABLE financial_clients ADD COLUMN IF NOT EXISTS deactivated_month VARCHAR(3)`).catch(() => {});
+db.query(`ALTER TABLE financial_clients ADD COLUMN IF NOT EXISTS deactivated_year INTEGER`).catch(() => {});
 
 db.query(`
   CREATE TABLE IF NOT EXISTS teacher_month_totals (
@@ -43,16 +45,23 @@ router.post('/clients', auth, async (req, res) => {
 
 router.put('/clients/:id', auth, async (req, res) => {
   try {
-    const { name, type, sessions, active, has_pack, has_insurance, has_invoice, professor_id, standard_value, value_to_professor } = req.body;
+    const { name, type, sessions, active, has_pack, has_insurance, has_invoice, professor_id, standard_value, value_to_professor, deactivated_month, deactivated_year } = req.body;
 
-    const { rows: old } = await db.query('SELECT name FROM financial_clients WHERE id=$1', [req.params.id]);
+    const { rows: old } = await db.query('SELECT name, deactivated_month, deactivated_year FROM financial_clients WHERE id=$1', [req.params.id]);
     const oldName = old[0]?.name;
+
+    // Reativar limpa sempre o período de desativação; desativar guarda o mês/ano indicado
+    // (ou mantém o que já lá estava, se este pedido não o indicar) para que os meses
+    // anteriores à desativação continuem a contar no relatório anual.
+    const dMonth = active ? null : (deactivated_month !== undefined ? deactivated_month : old[0]?.deactivated_month ?? null);
+    const dYear  = active ? null : (deactivated_year  !== undefined ? deactivated_year  : old[0]?.deactivated_year  ?? null);
 
     const { rows } = await db.query(`
       UPDATE financial_clients SET name=$1,type=$2,sessions=$3,active=$4,has_pack=$5,
-      has_insurance=$6,has_invoice=$7,professor_id=$8,standard_value=$9,value_to_professor=$10
-      WHERE id=$11 RETURNING *`,
-      [name, type, sessions, active, has_pack, has_insurance, has_invoice||false, professor_id||null, standard_value, value_to_professor, req.params.id]
+      has_insurance=$6,has_invoice=$7,professor_id=$8,standard_value=$9,value_to_professor=$10,
+      deactivated_month=$11,deactivated_year=$12
+      WHERE id=$13 RETURNING *`,
+      [name, type, sessions, active, has_pack, has_insurance, has_invoice||false, professor_id||null, standard_value, value_to_professor, dMonth, dYear, req.params.id]
     );
 
     if (oldName && name && oldName !== name) {
@@ -362,15 +371,24 @@ router.get('/annual', auth, async (req, res) => {
       db.query('SELECT * FROM financial_costs WHERE year=$1', [year]),
       db.query('SELECT * FROM teachers'),
       db.query('SELECT * FROM teacher_month_totals WHERE year=$1', [year]),
-      db.query('SELECT id, active, has_invoice FROM financial_clients'),
+      db.query('SELECT id, active, has_invoice, deactivated_month, deactivated_year FROM financial_clients'),
     ]);
     const teacherById = new Map(teachers.rows.map(t => [t.id, t]));
     const clientById  = new Map(clients.rows.map(c => [c.id, c]));
-    // Espelha o filtro "withVal" do resumo mensal: só clientes atualmente ativos
-    // e com valor > 0, para não contar clientes desativados/duplicados nos históricos
-    const activeValues = values.rows.filter(v => clientById.get(v.client_id)?.active && Number(v.value) > 0);
+    const monthIndex  = Object.fromEntries(MONTHS.map((m,i) => [m,i]));
+    // Um cliente conta para um mês se: estiver ativo, ou se estava ativo nesse mês
+    // (desativado num período posterior). Clientes desativados sem período registado
+    // (desativados antes desta funcionalidade existir) ficam de fora, para não repetir
+    // o problema de registos fantasma/duplicados a inflacionar meses passados.
+    const countsInMonth = (client, month) => {
+      if (!client) return false;
+      if (client.active) return true;
+      if (client.deactivated_year == null || client.deactivated_month == null) return false;
+      if (Number(year) !== Number(client.deactivated_year)) return Number(year) < Number(client.deactivated_year);
+      return monthIndex[month] <= monthIndex[client.deactivated_month];
+    };
     const result = MONTHS.map(month => {
-      const mVals  = activeValues.filter(v => v.month===month);
+      const mVals  = values.rows.filter(v => v.month===month && Number(v.value) > 0 && countsInMonth(clientById.get(v.client_id), month));
       const mPays  = payments.rows.filter(p => p.month===month);
       const mCosts = costs.rows.filter(c => c.month===month);
       const mMT    = monthTotals.rows.filter(t => t.month===month);
